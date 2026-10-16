@@ -46,7 +46,7 @@ Prebuilt binaries for macOS, Linux and Windows are attached to each [GitHub rele
 # Build a workspace from a spec (file or URL)
 turly import https://petstore3.swagger.io/api/v3/openapi.json --dir petstore
 
-# or import and open it straight away
+# or try a spec in a throwaway workspace (deleted on quit)
 turly -i petstore-openapi.json
 turly petstore
 ```

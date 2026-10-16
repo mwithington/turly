@@ -24,7 +24,7 @@ use workspace::{Workspace, registry, slug};
 struct Cli {
     /// Workspace directory to open
     path: Option<PathBuf>,
-    /// Import an OpenAPI/Swagger spec (file or URL) into a new workspace and open it
+    /// Import an OpenAPI/Swagger spec (file or URL) into a throwaway workspace and open it
     #[arg(short, long, value_name = "SPEC", conflicts_with = "path")]
     import: Option<String>,
     #[command(subcommand)]
@@ -61,29 +61,36 @@ fn main() -> Result<()> {
             println!("Created workspace '{name}' at {}", path.display());
             Ok(())
         }
-        Some(Cmd::Import { spec, dir }) => rt.block_on(import_spec(&spec, dir)).map(|_| ()),
+        Some(Cmd::Import { spec, dir }) => rt.block_on(import_spec(&spec, dir, true)).map(|_| ()),
         None => {
-            let path = match cli.import {
-                Some(spec) => Some(rt.block_on(import_spec(&spec, None))?),
-                None => cli.path,
+            let Some(spec) = cli.import else {
+                return run_tui(rt, cli.path);
             };
-            run_tui(rt, path)
+            let tmp = std::env::temp_dir().join(format!("turly-{}", std::process::id()));
+            let res = rt
+                .block_on(import_spec(&spec, Some(tmp.clone()), false))
+                .and_then(|_| run_tui(rt, Some(tmp.clone())));
+            let _ = std::fs::remove_dir_all(&tmp);
+            res
         }
     }
 }
 
-async fn import_spec(spec: &str, dir: Option<PathBuf>) -> Result<PathBuf> {
+/// Import `spec`; `persist` registers the workspace and reports it.
+async fn import_spec(spec: &str, dir: Option<PathBuf>, persist: bool) -> Result<PathBuf> {
     let imp = openapi::import(&openapi::fetch(spec).await?)?;
     let dir = dir.unwrap_or_else(|| PathBuf::from(slug(&imp.title)));
     let ws = openapi::build_workspace(&dir, &imp)?;
-    registry::add(&ws.root)?;
-    println!(
-        "Imported '{}': {} requests, {} environments -> {}",
-        imp.title,
-        imp.requests.len(),
-        imp.envs.len(),
-        dir.display()
-    );
+    if persist {
+        registry::add(&ws.root)?;
+        println!(
+            "Imported '{}': {} requests, {} environments -> {}",
+            imp.title,
+            imp.requests.len(),
+            imp.envs.len(),
+            dir.display()
+        );
+    }
     Ok(dir)
 }
 
