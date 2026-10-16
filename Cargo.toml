@@ -1,0 +1,39 @@
+[package]
+name = "turly"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.88"
+description = "A terminal API client with Vim keys, workspaces and OpenAPI import"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/mwithington/turly"
+homepage = "https://github.com/mwithington/turly"
+readme = "README.md"
+keywords = ["api", "http", "tui", "postman", "openapi"]
+categories = ["command-line-utilities", "development-tools", "web-programming::http-client"]
+exclude = ["/.github", "/assets", "/tests/fixtures"]
+
+[dependencies]
+anyhow = "1.0.104"
+base64 = "0.23.1"
+clap = { version = "4.6.7", features = ["derive"] }
+crossterm = "0.29.0"
+dirs = "7.0.0"
+edtui = { version = "0.11.7", default-features = false, features = ["arboard", "mouse-support", "system-editor"] }
+ratatui = "0.30.2"
+reqwest = { version = "0.13.5", default-features = false, features = ["rustls", "json", "cookies", "gzip", "deflate", "brotli"] }
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+serde_yaml_ng = "0.10.0"
+syntect = { version = "5.3.0", default-features = false, features = ["default-syntaxes", "default-themes", "regex-fancy"] }
+tokio = { version = "1.53.3", features = ["rt-multi-thread", "macros", "sync"] }
+toml = "1.1.8"
+url = "2.5.8"
+
+[dev-dependencies]
+insta = "1.49.0"
+tempfile = "3.27.0"
+
+[profile.release]
+lto = "thin"
+strip = true
+codegen-units = 1

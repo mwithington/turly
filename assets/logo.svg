@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="Turly">
+  <rect width="256" height="256" rx="56" fill="#1b1815"/>
+  <!-- legs and head -->
+  <rect x="70" y="170" width="34" height="30" rx="12" fill="#b8570f"/>
+  <rect x="152" y="170" width="34" height="30" rx="12" fill="#b8570f"/>
+  <circle cx="218" cy="150" r="20" fill="#e8893a"/>
+  <circle cx="225" cy="145" r="4" fill="#1b1815"/>
+  <rect x="26" y="150" width="30" height="14" rx="7" fill="#b8570f" transform="rotate(-18 41 157)"/>
+  <!-- shell -->
+  <path d="M40 176C40 108 84 62 128 62s88 46 88 114z" fill="#e8893a"/>
+  <rect x="34" y="170" width="188" height="16" rx="8" fill="#b8570f"/>
+  <!-- scale seams -->
+  <path d="M128 62v22M82 96l16 18M174 96l-16 18" stroke="#1b1815" stroke-width="6" stroke-linecap="round" fill="none"/>
+  <!-- prompt -->
+  <path d="M98 122l26 18-26 18" stroke="#1b1815" stroke-width="11" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+  <path d="M138 160h34" stroke="#1b1815" stroke-width="11" stroke-linecap="round"/>
+</svg>

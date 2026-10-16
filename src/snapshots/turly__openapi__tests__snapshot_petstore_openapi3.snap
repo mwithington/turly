@@ -1,0 +1,24 @@
+---
+source: src/openapi.rs
+expression: "summary(&import(include_str!(\"../tests/fixtures/petstore-openapi3.json\")).unwrap())"
+---
+Swagger Petstore - OpenAPI 3.0 | envs: default=http://localhost/api/v3
+pet/updatePet PUT {{base_url}}/pet auth=none body=json
+pet/addPet POST {{base_url}}/pet auth=none body=json
+pet/findPetsByStatus GET {{base_url}}/pet/findByStatus auth=none body=none
+pet/findPetsByTags GET {{base_url}}/pet/findByTags auth=none body=none
+pet/getPetById GET {{base_url}}/pet/{{petId}} auth=apikey body=none
+pet/updatePetWithForm POST {{base_url}}/pet/{{petId}} auth=none body=none
+pet/deletePet DELETE {{base_url}}/pet/{{petId}} auth=none body=none
+pet/uploadFile POST {{base_url}}/pet/{{petId}}/uploadImage auth=none body=text
+store/getInventory GET {{base_url}}/store/inventory auth=apikey body=none
+store/placeOrder POST {{base_url}}/store/order auth=none body=json
+store/getOrderById GET {{base_url}}/store/order/{{orderId}} auth=none body=none
+store/deleteOrder DELETE {{base_url}}/store/order/{{orderId}} auth=none body=none
+user/createUser POST {{base_url}}/user auth=none body=json
+user/createUsersWithListInput POST {{base_url}}/user/createWithList auth=none body=json
+user/loginUser GET {{base_url}}/user/login auth=none body=none
+user/logoutUser GET {{base_url}}/user/logout auth=none body=none
+user/getUserByName GET {{base_url}}/user/{{username}} auth=none body=none
+user/updateUser PUT {{base_url}}/user/{{username}} auth=none body=json
+user/deleteUser DELETE {{base_url}}/user/{{username}} auth=none body=none
