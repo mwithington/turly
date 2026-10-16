@@ -24,6 +24,9 @@ use workspace::{Workspace, registry, slug};
 struct Cli {
     /// Workspace directory to open
     path: Option<PathBuf>,
+    /// Import an OpenAPI/Swagger spec (file or URL) into a new workspace and open it
+    #[arg(short, long, value_name = "SPEC", conflicts_with = "path")]
+    import: Option<String>,
     #[command(subcommand)]
     cmd: Option<Cmd>,
 }
@@ -58,22 +61,30 @@ fn main() -> Result<()> {
             println!("Created workspace '{name}' at {}", path.display());
             Ok(())
         }
-        Some(Cmd::Import { spec, dir }) => rt.block_on(async {
-            let imp = openapi::import(&openapi::fetch(&spec).await?)?;
-            let dir = dir.unwrap_or_else(|| PathBuf::from(slug(&imp.title)));
-            let ws = openapi::build_workspace(&dir, &imp)?;
-            registry::add(&ws.root)?;
-            println!(
-                "Imported '{}': {} requests, {} environments -> {}",
-                imp.title,
-                imp.requests.len(),
-                imp.envs.len(),
-                dir.display()
-            );
-            Ok(())
-        }),
-        None => run_tui(rt, cli.path),
+        Some(Cmd::Import { spec, dir }) => rt.block_on(import_spec(&spec, dir)).map(|_| ()),
+        None => {
+            let path = match cli.import {
+                Some(spec) => Some(rt.block_on(import_spec(&spec, None))?),
+                None => cli.path,
+            };
+            run_tui(rt, path)
+        }
     }
+}
+
+async fn import_spec(spec: &str, dir: Option<PathBuf>) -> Result<PathBuf> {
+    let imp = openapi::import(&openapi::fetch(spec).await?)?;
+    let dir = dir.unwrap_or_else(|| PathBuf::from(slug(&imp.title)));
+    let ws = openapi::build_workspace(&dir, &imp)?;
+    registry::add(&ws.root)?;
+    println!(
+        "Imported '{}': {} requests, {} environments -> {}",
+        imp.title,
+        imp.requests.len(),
+        imp.envs.len(),
+        dir.display()
+    );
+    Ok(dir)
 }
 
 /// Workspace to open: explicit path, else cwd if it is one, else the most recently registered.
