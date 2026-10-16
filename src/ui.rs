@@ -10,12 +10,13 @@ use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Clear, Paragraph, Wrap};
 
-const LOGO: &str = r"      ▄███████▄
-    ▄█▀ ▄▀▀▀▄ ▀█▄
-   ██  █ >_  █  ██▄▄
-    ▀█▄ ▀▄▄▄▀ ▄█▀  ▀
-      ▀███████▀
-        ▀▀ ▀▀";
+const LOGO: &str = r"  ✦      ▄▄███▄▄      · 
+       ▄███▀▀ ▀▀▀       
+  ·   ▐███▀       ✦     
+      ████    ·         
+      ▐███▄             
+   ✧   ▀███▄▄ ▄▄▄  ·    
+ ·       ▀▀███▀▀    ✦   ";
 
 fn fg(c: Color) -> Style {
     Style::default().fg(c)
