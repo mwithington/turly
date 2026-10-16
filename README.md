@@ -101,7 +101,7 @@ Press `:` and type. Tab completes, and the list shows what each command does.
 | `:ws <path\|name>`, `:wsnew <path>` | Switch to / create a workspace |
 | `:env [name]`, `:envnew <name>` | Switch to / create an environment |
 | `:set k=v`, `:secret k=v` | Set a variable / a secret in the active environment |
-| `:vars` | Edit the active environment line by line (`key=value`, `secret key=value`; `Ctrl-s` saves) |
+| `:vars` | Edit the active environment line by line (`key=value`, `secret key=value`; `Ctrl-s` or `:w` saves, `:wq` saves and closes, `:q` or `Esc` closes) |
 | `:import <spec> [dir]` | Build a workspace from an OpenAPI or Swagger spec |
 | `:theme [name]` | Switch theme |
 | `:help` | Key reference |

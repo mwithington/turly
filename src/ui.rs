@@ -59,11 +59,13 @@ pub fn draw(f: &mut Frame, app: &mut App) {
         draw_response(f, app, &th, resp);
     }
     draw_bottom(f, app, &th, bot);
+    if app.vars.is_some() {
+        draw_vars(f, app, &th, area);
+    }
     match app.mode {
         Mode::Command | Mode::Search => draw_popup(f, app, &th, area),
         Mode::Confirm => draw_confirm(f, app, &th, area),
         Mode::Help => draw_help(f, &th, area),
-        Mode::Vars => draw_vars(f, app, &th, area),
         _ => {}
     }
 }

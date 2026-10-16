@@ -1162,39 +1162,59 @@ impl App {
         };
         let key = Key::from(ke);
         if key.ctrl && self.keys.single(key) == Some(Action::Save) {
-            let text = text_of(&v.ed);
-            let env = v.env.clone();
-            let Some(ws) = &self.ws else { return };
-            return match ws.save_vars_text(&env, &text) {
-                Ok(()) => {
-                    self.vars = None;
-                    self.mode = Mode::Normal;
-                    self.info(format!("Saved variables for '{env}'"));
-                }
-                Err(e) => self.err(e.to_string()),
-            };
+            return self.save_vars(false);
         }
-        if ke.code == KeyCode::Esc && v.ed.mode == EditorMode::Normal {
-            if text_of(&v.ed) == v.orig || v.armed {
-                self.vars = None;
-                self.mode = Mode::Normal;
-            } else {
-                v.armed = true;
-                self.err("Unsaved changes: Ctrl-s saves, Esc again discards");
+        if v.ed.mode == EditorMode::Normal {
+            match ke.code {
+                KeyCode::Esc => return self.close_vars(false),
+                KeyCode::Char(':') => return self.open_popup(Mode::Command, ""),
+                _ => {}
             }
-            return;
         }
         v.armed = false;
         self.handler.on_key_event(ke, &mut v.ed);
     }
 
+    /// Write the `:vars` buffer to disk; `close` also leaves the popup.
+    pub fn save_vars(&mut self, close: bool) {
+        let (Some(v), Some(ws)) = (&mut self.vars, &self.ws) else {
+            return;
+        };
+        let text = text_of(&v.ed);
+        match ws.save_vars_text(&v.env, &text) {
+            Ok(()) => {
+                let env = v.env.clone();
+                v.orig = text;
+                if close {
+                    self.vars = None;
+                    self.mode = Mode::Normal;
+                }
+                self.info(format!("Saved variables for '{env}'"));
+            }
+            Err(e) => self.err(e.to_string()),
+        }
+    }
+
+    /// Leave `:vars`; unsaved edits need `force` or a second request.
+    pub fn close_vars(&mut self, force: bool) {
+        if let Some(v) = &mut self.vars
+            && !force
+            && !v.armed
+            && text_of(&v.ed) != v.orig
+        {
+            v.armed = true;
+            return self.err("Unsaved changes: Ctrl-s or :w saves, :q! or Esc again discards");
+        }
+        self.vars = None;
+        self.mode = Mode::Normal;
+    }
+
     // ---- popups: command & search ----
 
     pub fn open_popup(&mut self, mode: Mode, prefill: &str) {
-        self.return_to = if self.mode == Mode::Edit {
-            Mode::Edit
-        } else {
-            Mode::Normal
+        self.return_to = match self.mode {
+            Mode::Edit | Mode::Vars => self.mode,
+            _ => Mode::Normal,
         };
         self.mode = mode;
         self.input = prefill.to_string();

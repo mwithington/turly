@@ -244,6 +244,15 @@ impl App {
             .split_once(' ')
             .map(|(c, a)| (c, a.trim()))
             .unwrap_or((line, ""));
+        if self.mode == Mode::Vars {
+            match cmd {
+                "w" => return self.save_vars(false),
+                "wq" => return self.save_vars(true),
+                "q" | "qa" => return self.close_vars(false),
+                "q!" => return self.close_vars(true),
+                _ => {}
+            }
+        }
         match cmd {
             "" => {}
             "w" => self.save_current(),
