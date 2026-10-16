@@ -37,6 +37,7 @@ pub enum Mode {
     Search,
     Confirm,
     Help,
+    Vars,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -259,6 +260,14 @@ pub struct RespView {
     pub cur_match: usize,
 }
 
+/// The `:vars` popup: an env's variables as editable text.
+pub struct VarsEd {
+    pub env: String,
+    pub ed: EditorState,
+    orig: String,
+    armed: bool,
+}
+
 pub struct Status {
     pub text: String,
     pub err: bool,
@@ -270,6 +279,7 @@ pub struct App {
     pub keys: KeyMap,
     pub hl: Highlighter,
     pub handler: EditorEventHandler,
+    pub vars: Option<VarsEd>,
     pub mode: Mode,
     pub return_to: Mode,
     pub focus: Focus,
@@ -323,6 +333,7 @@ impl App {
             keys,
             hl: Highlighter::new(),
             handler: EditorEventHandler::default(),
+            vars: None,
             mode: Mode::Normal,
             return_to: Mode::Normal,
             focus: Focus::Tree,
@@ -693,6 +704,7 @@ impl App {
             Mode::Command | Mode::Search => self.popup_key(ke),
             Mode::Confirm => self.confirm_key(ke),
             Mode::Help => self.mode = Mode::Normal,
+            Mode::Vars => self.vars_key(ke),
             Mode::Edit => self.edit_key(ke),
             Mode::Normal => self.normal_key(ke),
         }
@@ -704,6 +716,12 @@ impl App {
                 self.input.push_str(s.lines().next().unwrap_or(""));
                 if self.mode == Mode::Search {
                     self.apply_search();
+                }
+            }
+            Mode::Vars => {
+                if let Some(v) = &mut self.vars {
+                    let ev = crossterm::event::Event::Paste(s.to_string());
+                    self.handler.on_event(ev, &mut v.ed);
                 }
             }
             Mode::Edit => {
@@ -1116,6 +1134,60 @@ impl App {
         self.after_edit();
     }
 
+    // ---- :vars editor ----
+
+    pub fn open_vars(&mut self) {
+        let Some(ws) = self.need_ws() else { return };
+        let Some(env) = self.env_name() else {
+            return self.err("No active environment (:envnew <name>)");
+        };
+        match ws.vars_text(&env) {
+            Ok(text) => {
+                self.vars = Some(VarsEd {
+                    env,
+                    ed: editor(&text),
+                    orig: text,
+                    armed: false,
+                });
+                self.mode = Mode::Vars;
+            }
+            Err(e) => self.err(e.to_string()),
+        }
+    }
+
+    fn vars_key(&mut self, ke: KeyEvent) {
+        let Some(v) = &mut self.vars else {
+            self.mode = Mode::Normal;
+            return;
+        };
+        let key = Key::from(ke);
+        if key.ctrl && self.keys.single(key) == Some(Action::Save) {
+            let text = text_of(&v.ed);
+            let env = v.env.clone();
+            let Some(ws) = &self.ws else { return };
+            return match ws.save_vars_text(&env, &text) {
+                Ok(()) => {
+                    self.vars = None;
+                    self.mode = Mode::Normal;
+                    self.info(format!("Saved variables for '{env}'"));
+                }
+                Err(e) => self.err(e.to_string()),
+            };
+        }
+        if ke.code == KeyCode::Esc && v.ed.mode == EditorMode::Normal {
+            if text_of(&v.ed) == v.orig || v.armed {
+                self.vars = None;
+                self.mode = Mode::Normal;
+            } else {
+                v.armed = true;
+                self.err("Unsaved changes: Ctrl-s saves, Esc again discards");
+            }
+            return;
+        }
+        v.armed = false;
+        self.handler.on_key_event(ke, &mut v.ed);
+    }
+
     // ---- popups: command & search ----
 
     pub fn open_popup(&mut self, mode: Mode, prefill: &str) {
@@ -1299,6 +1371,11 @@ impl App {
             Mode::Search => "SEARCH",
             Mode::Confirm => "CONFIRM",
             Mode::Help => "HELP",
+            Mode::Vars => match self.vars.as_ref().map(|v| v.ed.mode) {
+                Some(EditorMode::Insert) => "VARS INSERT",
+                Some(EditorMode::Visual) => "VARS VISUAL",
+                _ => "VARS",
+            },
             Mode::Normal => "NORMAL",
             Mode::Edit => match self.cur_editor().map(|e| e.mode) {
                 Some(EditorMode::Insert) => "INSERT",

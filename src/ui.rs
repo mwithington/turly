@@ -63,6 +63,7 @@ pub fn draw(f: &mut Frame, app: &mut App) {
         Mode::Command | Mode::Search => draw_popup(f, app, &th, area),
         Mode::Confirm => draw_confirm(f, app, &th, area),
         Mode::Help => draw_help(f, &th, area),
+        Mode::Vars => draw_vars(f, app, &th, area),
         _ => {}
     }
 }
@@ -524,6 +525,7 @@ fn draw_bottom(f: &mut Frame, app: &mut App, th: &Theme, area: Rect) {
         .collect::<Vec<_>>()
         .join(" ");
     let hints = match (app.mode, app.focus) {
+        (Mode::Vars, _) => "Ctrl-s save · Esc close · i insert",
         (Mode::Edit, _) => "Esc leave · Ctrl-r send · Ctrl-s save · : command",
         (_, Focus::Tree) => "Enter open+send · o new · dd delete · / filter · : command · ? help",
         (_, Focus::Request) => {
@@ -658,6 +660,29 @@ fn draw_confirm(f: &mut Frame, app: &App, th: &Theme, area: Rect) {
     f.render_widget(block, rect);
     f.render_widget(
         Paragraph::new(format!("{} (y/n)", app.confirm.clone().unwrap_or_default())),
+        inner,
+    );
+}
+
+fn draw_vars(f: &mut Frame, app: &mut App, th: &Theme, area: Rect) {
+    let Some(v) = &mut app.vars else { return };
+    let rect = popup_rect(area, 80, area.height * 3 / 5);
+    f.render_widget(Clear, rect);
+    let block = Block::bordered()
+        .border_style(fg(th.accent))
+        .title(Span::styled(
+            format!(" Variables: {} ", v.env),
+            fg(th.accent).add_modifier(Modifier::BOLD),
+        ))
+        .title_bottom(Span::styled(
+            " key=value · secret key=value · Ctrl-s save · Esc close ",
+            fg(th.dim),
+        ))
+        .style(Style::default().bg(th.bg).fg(th.fg));
+    let inner = block.inner(rect);
+    f.render_widget(block, rect);
+    f.render_widget(
+        EditorView::new(&mut v.ed).theme(editor_theme(th, true)),
         inner,
     );
 }

@@ -128,6 +128,11 @@ const CMDS: &[Cmd] = &[
         desc: "Save the response body to a file",
     },
     Cmd {
+        name: "vars",
+        args: "",
+        desc: "Edit the active environment's variables line by line",
+    },
+    Cmd {
         name: "help",
         args: "",
         desc: "Show key bindings",
@@ -297,6 +302,7 @@ impl App {
             }
             "curl" => self.act(Action::CopyCurl),
             "save" => self.cmd_save(arg),
+            "vars" => self.open_vars(),
             "help" => self.mode = Mode::Help,
             other => self.err(format!("Unknown command: {other}")),
         }
@@ -400,9 +406,7 @@ impl App {
             .map(|n| n.to_string_lossy().into_owned())
             .unwrap_or_else(|| "workspace".into());
         match Workspace::init(&dir, &name) {
-            Ok(mut ws) => {
-                ws.meta.active_env = Some("default".into());
-                let _ = ws.save_meta();
+            Ok(ws) => {
                 self.set_workspace(ws);
                 self.info(format!("Created workspace '{name}'"));
             }

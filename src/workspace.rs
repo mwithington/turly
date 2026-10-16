@@ -93,7 +93,7 @@ impl Workspace {
             active_env: None,
         };
         write_yaml(&root.join(META_FILE), &meta)?;
-        let ws = Workspace {
+        let mut ws = Workspace {
             root: root.to_path_buf(),
             meta,
         };
@@ -102,6 +102,8 @@ impl Workspace {
             env.vars
                 .insert("base_url".into(), "http://localhost:8080".into());
             ws.save_env("default", &env)?;
+            ws.meta.active_env = Some("default".into());
+            ws.save_meta()?;
         }
         Ok(ws)
     }
@@ -204,6 +206,48 @@ impl Workspace {
             e.vars.insert(key.into(), value.into());
         }
         self.save_env(env, &e)
+    }
+
+    /// Env as editable text: `key=value` lines, `secret key=value` for secrets.
+    pub fn vars_text(&self, env: &str) -> Result<String> {
+        let e = self.load_env(env)?;
+        let mut sec = self.load_secrets().remove(env).unwrap_or_default();
+        let mut out: Vec<String> = e.vars.iter().map(|(k, v)| format!("{k}={v}")).collect();
+        for k in &e.secrets {
+            out.push(format!("secret {k}={}", sec.remove(k).unwrap_or_default()));
+        }
+        Ok(out.join("\n"))
+    }
+
+    /// Replace an env's variables from `vars_text` format. Blank and `#` lines are ignored.
+    pub fn save_vars_text(&self, env: &str, text: &str) -> Result<()> {
+        let mut e = self.load_env(env)?;
+        let (mut vars, mut secrets) = (BTreeMap::new(), BTreeMap::new());
+        for line in text.lines().map(str::trim) {
+            if line.is_empty() || line.starts_with('#') {
+                continue;
+            }
+            let (secret, kv) = match line.strip_prefix("secret ") {
+                Some(r) => (true, r),
+                None => (false, line),
+            };
+            let (k, v) = kv.split_once('=').unwrap_or((kv, ""));
+            let (k, v) = (k.trim().to_string(), v.trim().to_string());
+            if k.is_empty() {
+                continue;
+            }
+            if secret {
+                secrets.insert(k, v);
+            } else {
+                vars.insert(k, v);
+            }
+        }
+        e.vars = vars;
+        e.secrets = secrets.keys().cloned().collect();
+        self.save_env(env, &e)?;
+        let mut all = self.load_secrets();
+        all.insert(env.into(), secrets);
+        write_yaml(&self.secrets_path(), &all)
     }
 
     pub fn history_path(&self) -> PathBuf {
@@ -317,6 +361,9 @@ mod tests {
         let p = ws.new_request_path(&ws.requests_dir(), "Get Thing");
         ws.save_request(&p, &Request::new("Get Thing")).unwrap();
         assert_eq!(ws.tree().unwrap().len(), 1);
+        ws.save_vars_text("default", "a=1\n# note\nsecret tok=x=y\n\nb = 2")
+            .unwrap();
+        assert_eq!(ws.vars_text("default").unwrap(), "a=1\nb=2\nsecret tok=x=y");
         ws.set_var("default", "token", "s3", true).unwrap();
         let v = ws.resolved_vars(Some("default"));
         assert_eq!(v["token"], "s3");
