@@ -6,6 +6,7 @@ use crate::http::{self, Response};
 use crate::keymap::{Action, Key, KeyMap, Lookup};
 use crate::model::{Auth, Method, Param, Request};
 use crate::theme::Theme;
+use crate::vimext::Vim;
 use crate::workspace::{Node, Workspace, registry};
 use anyhow::Result;
 use crossterm::event::{KeyCode, KeyEvent};
@@ -14,9 +15,10 @@ use edtui::actions::search::{
 };
 use edtui::{EditorEventHandler, EditorMode, EditorState, Lines};
 use ratatui::text::Line;
-use std::collections::HashSet;
+use std::collections::{BTreeMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::time::Instant;
 use tokio::runtime::Handle;
 use tokio::sync::mpsc::UnboundedSender;
 
@@ -46,15 +48,17 @@ pub enum ReqTab {
     Headers,
     Auth,
     Body,
+    Example,
     Docs,
 }
 
 impl ReqTab {
-    pub const ALL: [ReqTab; 5] = [
+    pub const ALL: [ReqTab; 6] = [
         ReqTab::Params,
         ReqTab::Headers,
         ReqTab::Auth,
         ReqTab::Body,
+        ReqTab::Example,
         ReqTab::Docs,
     ];
 
@@ -64,6 +68,7 @@ impl ReqTab {
             ReqTab::Headers => "Headers",
             ReqTab::Auth => "Auth",
             ReqTab::Body => "Body",
+            ReqTab::Example => "Example",
             ReqTab::Docs => "Docs",
         }
     }
@@ -176,7 +181,7 @@ fn parse_auth(base: &Auth, text: &str) -> Auth {
 }
 
 impl Editors {
-    fn new(r: &Request) -> Editors {
+    pub(crate) fn new(r: &Request) -> Editors {
         let mut url = editor(&r.url);
         url.set_single_line(true);
         Editors {
@@ -194,7 +199,7 @@ impl Editors {
             ReqTab::Headers => Some(&mut self.headers),
             ReqTab::Auth => Some(&mut self.auth),
             ReqTab::Body => Some(&mut self.body),
-            ReqTab::Docs => None,
+            ReqTab::Example | ReqTab::Docs => None,
         }
     }
 }
@@ -280,6 +285,9 @@ pub struct App {
     pub hl: Highlighter,
     pub handler: EditorEventHandler,
     pub vars: Option<VarsEd>,
+    pub vim: Vim,
+    pub var_cache: BTreeMap<String, String>,
+    pub blink: Instant,
     pub mode: Mode,
     pub return_to: Mode,
     pub focus: Focus,
@@ -334,6 +342,9 @@ impl App {
             hl: Highlighter::new(),
             handler: EditorEventHandler::default(),
             vars: None,
+            vim: Vim::default(),
+            var_cache: BTreeMap::new(),
+            blink: Instant::now(),
             mode: Mode::Normal,
             return_to: Mode::Normal,
             focus: Focus::Tree,
@@ -408,6 +419,7 @@ impl App {
         self.filter.clear();
         self.cursor = 0;
         self.ws = Some(ws);
+        self.refresh_vars();
         self.reload_tree();
     }
 
@@ -696,7 +708,26 @@ impl App {
 
     // ---- input ----
 
+    /// Cursor blink phase; any key press restarts it solid.
+    pub fn cursor_on(&self) -> bool {
+        (self.blink.elapsed().as_millis() / 530) & 1 == 0
+    }
+
+    /// Refresh the variable values shown inline in editors.
+    pub fn refresh_vars(&mut self) {
+        self.var_cache = match &self.ws {
+            Some(ws) => ws.resolved_vars(ws.meta.active_env.as_deref()),
+            None => BTreeMap::new(),
+        };
+    }
+
     pub fn on_key(&mut self, ke: KeyEvent) {
+        self.blink = Instant::now();
+        self.dispatch_key(ke);
+        self.refresh_vars();
+    }
+
+    fn dispatch_key(&mut self, ke: KeyEvent) {
         if self.mode != Mode::Edit {
             self.status = None;
         }
@@ -1086,7 +1117,7 @@ impl App {
                 ed.mode = EditorMode::Insert;
                 self.mode = Mode::Edit;
             }
-            None => self.err("Docs are read-only"),
+            None => self.err("This tab is read-only"),
         }
     }
 
@@ -1114,6 +1145,17 @@ impl App {
             return;
         };
         let em = ed.mode;
+        if em == EditorMode::Normal && self.vim.pending() {
+            if ke.code == KeyCode::Esc {
+                self.vim.reset();
+            } else {
+                let mut vim = std::mem::take(&mut self.vim);
+                self.with_editor(|h, ed| vim.key(h, ed, ke));
+                self.vim = vim;
+                self.after_edit();
+            }
+            return;
+        }
         if em == EditorMode::Normal {
             match ke.code {
                 KeyCode::Esc => {
@@ -1130,7 +1172,13 @@ impl App {
             self.after_edit();
             return self.do_send();
         }
-        self.with_editor(|h, ed| h.on_key_event(ke, ed));
+        let mut vim = std::mem::take(&mut self.vim);
+        self.with_editor(|h, ed| {
+            if em != EditorMode::Normal || !vim.key(h, ed, ke) {
+                h.on_key_event(ke, ed);
+            }
+        });
+        self.vim = vim;
         self.after_edit();
     }
 
@@ -1164,7 +1212,16 @@ impl App {
         if key.ctrl && self.keys.single(key) == Some(Action::Save) {
             return self.save_vars(false);
         }
-        if v.ed.mode == EditorMode::Normal {
+        let normal = v.ed.mode == EditorMode::Normal;
+        if normal && self.vim.pending() {
+            if ke.code == KeyCode::Esc {
+                self.vim.reset();
+            } else {
+                self.vim.key(&mut self.handler, &mut v.ed, ke);
+            }
+            return;
+        }
+        if normal {
             match ke.code {
                 KeyCode::Esc => return self.close_vars(false),
                 KeyCode::Char(':') => return self.open_popup(Mode::Command, ""),
@@ -1172,7 +1229,9 @@ impl App {
             }
         }
         v.armed = false;
-        self.handler.on_key_event(ke, &mut v.ed);
+        if !normal || !self.vim.key(&mut self.handler, &mut v.ed, ke) {
+            self.handler.on_key_event(ke, &mut v.ed);
+        }
     }
 
     /// Write the `:vars` buffer to disk; `close` also leaves the popup.

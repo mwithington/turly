@@ -9,6 +9,7 @@ mod openapi;
 mod theme;
 mod ui;
 mod vars;
+mod vimext;
 mod workspace;
 
 use anyhow::{Result, bail};

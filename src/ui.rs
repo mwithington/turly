@@ -1,14 +1,18 @@
 //! Rendering.
 
-use crate::app::{App, Focus, Mode, ReqField, ReqTab, RespTab, RowKind};
-use crate::model::{Auth, Method};
+use crate::app::{App, Focus, Mode, ReqField, ReqTab, RespTab, RowKind, text_of};
+use crate::highlight::Lang;
+use crate::model::{Auth, BodyKind, Method};
 use crate::theme::Theme;
-use edtui::{EditorTheme, EditorView};
+use edtui::{EditorState, EditorTheme, EditorView, Highlight, Index2};
+
 use ratatui::Frame;
+use ratatui::buffer::Buffer;
 use ratatui::layout::{Alignment, Constraint, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Clear, Paragraph, Wrap};
+use std::collections::BTreeMap;
 
 const LOGO: &str = r"  ✦      ▄▄███▄▄      · 
        ▄███▀▀ ▀▀▀       
@@ -223,6 +227,149 @@ fn editor_theme(th: &Theme, show_cursor: bool) -> EditorTheme<'static> {
     }
 }
 
+/// `{{name}}` references on a line: (start, inclusive end, resolved value), in chars.
+fn refs(line: &str, vars: &BTreeMap<String, String>) -> Vec<(usize, usize, Option<String>)> {
+    let cs: Vec<char> = line.chars().collect();
+    let mut out = vec![];
+    let mut i = 0;
+    while i + 1 < cs.len() {
+        if cs[i] == '{'
+            && cs[i + 1] == '{'
+            && let Some(j) = (i + 2..cs.len() - 1).find(|&j| cs[j] == '}' && cs[j + 1] == '}')
+        {
+            let name: String = cs[i + 2..j].iter().collect();
+            let name = name.trim();
+            let val = match name.strip_prefix('$') {
+                Some(e) => std::env::var(e).ok(),
+                None => vars.get(name).cloned(),
+            };
+            out.push((i, j + 1, val));
+            i = j + 2;
+        } else {
+            i += 1;
+        }
+    }
+    out
+}
+
+fn hl(row: usize, from: usize, to: usize, style: Style) -> Highlight {
+    Highlight::new(Index2::new(row, from), Index2::new(row, to), style)
+}
+
+/// Draw an editor whose `{{vars}}` are colored, and shown as their values off the cursor row.
+fn render_editor(
+    f: &mut Frame,
+    ed: &mut EditorState,
+    area: Rect,
+    th: &Theme,
+    vars: &BTreeMap<String, String>,
+    editing: bool,
+    blink: bool,
+) {
+    let text = text_of(ed);
+    let mut marks = vec![];
+    for (row, line) in text.lines().enumerate() {
+        for (s, e, v) in refs(line, vars) {
+            marks.push(hl(
+                row,
+                s,
+                e,
+                fg(if v.is_some() { th.err } else { th.warn }),
+            ));
+        }
+    }
+    ed.set_highlights(marks);
+    f.render_widget(
+        EditorView::new(ed)
+            .theme(editor_theme(th, editing && blink))
+            .wrap(false),
+        area,
+    );
+    let reveal = editing.then_some(ed.cursor.row);
+    let (ox, oy) = ed.viewport_offset();
+    let buf = f.buffer_mut();
+    for (i, line) in text.lines().skip(oy).take(area.height as usize).enumerate() {
+        if reveal == Some(oy + i) {
+            continue;
+        }
+        let rs = refs(line, vars);
+        if rs.iter().all(|r| r.2.is_none()) {
+            continue;
+        }
+        let cs: Vec<char> = line.chars().collect();
+        let (mut cells, mut k, mut ri) = (vec![], 0, 0);
+        while k < cs.len() {
+            match rs.get(ri) {
+                Some((s, e, v)) if *s == k => {
+                    match v {
+                        Some(v) => cells.extend(v.chars().map(|c| (c, fg(th.err)))),
+                        None => cells.extend(cs[*s..=*e].iter().map(|&c| (c, fg(th.warn)))),
+                    }
+                    k = e + 1;
+                    ri += 1;
+                }
+                _ => {
+                    cells.push((cs[k], fg(th.fg)));
+                    k += 1;
+                }
+            }
+        }
+        put_row(buf, area, i as u16, &cells[ox.min(cells.len())..], th);
+    }
+}
+
+/// Overwrite one editor row with styled chars.
+fn put_row(buf: &mut Buffer, area: Rect, i: u16, cells: &[(char, Style)], th: &Theme) {
+    let y = area.y + i;
+    for x in area.x..area.right() {
+        let c = &mut buf[(x, y)];
+        c.set_symbol(" ");
+        c.set_style(Style::default().bg(th.bg).fg(th.fg));
+    }
+    let mut x = area.x;
+    for (ch, st) in cells {
+        let w = Span::raw(ch.to_string()).width() as u16;
+        if x + w > area.right() {
+            break;
+        }
+        buf.set_string(x, y, ch.to_string(), st.bg(th.bg));
+        x += w;
+    }
+}
+
+/// `key=value` coloring for the :vars page: green key, white value.
+fn tint_vars_page(ed: &mut EditorState, th: &Theme) {
+    let mut marks = vec![];
+    for (row, line) in text_of(ed).lines().enumerate() {
+        let n = line.chars().count();
+        if n == 0 {
+            continue;
+        }
+        if line.trim_start().starts_with('#') {
+            marks.push(hl(row, 0, n - 1, fg(th.dim)));
+            continue;
+        }
+        let kw = if line.starts_with("secret ") { 7 } else { 0 };
+        if kw > 0 {
+            marks.push(hl(row, 0, 5, fg(th.warn)));
+        }
+        match line.chars().position(|c| c == '=') {
+            Some(eq) => {
+                if eq > kw {
+                    marks.push(hl(row, kw, eq - 1, fg(th.ok)));
+                }
+                marks.push(hl(row, eq, eq, fg(th.dim)));
+                if eq + 1 < n {
+                    marks.push(hl(row, eq + 1, n - 1, fg(th.fg)));
+                }
+            }
+            None if n > kw => marks.push(hl(row, kw, n - 1, fg(th.ok))),
+            None => {}
+        }
+    }
+    ed.set_highlights(marks);
+}
+
 fn draw_request(f: &mut Frame, app: &mut App, th: &Theme, area: Rect) {
     let focused = app.focus == Focus::Request;
     let Some(name_dirty) = app.open.as_ref().map(|o| (o.req.name.clone(), o.dirty())) else {
@@ -259,9 +406,21 @@ fn draw_request(f: &mut Frame, app: &mut App, th: &Theme, area: Rect) {
         Constraint::Min(1),
     ])
     .areas(inner);
+    let example_lines = app
+        .open
+        .as_ref()
+        .and_then(|o| o.req.example.as_ref())
+        .map(|ex| {
+            let lang = match ex.kind {
+                BodyKind::Json => Lang::Json,
+                _ => Lang::Plain,
+            };
+            app.hl.lines(lang, &ex.content, th)
+        });
 
     let (url_edit, content_edit) = (editing(app, ReqField::Url), editing(app, ReqField::Content));
     let (field, tab) = (app.req_field, app.req_tab);
+    let (vars, blink) = (app.var_cache.clone(), app.cursor_on());
     let o = app.open.as_mut().expect("checked");
 
     let marker = if focused && field == ReqField::Url {
@@ -282,10 +441,7 @@ fn draw_request(f: &mut Frame, app: &mut App, th: &Theme, area: Rect) {
         )),
         lbl,
     );
-    f.render_widget(
-        EditorView::new(&mut o.ed.url).theme(editor_theme(th, url_edit)),
-        urlr,
-    );
+    render_editor(f, &mut o.ed.url, urlr, th, &vars, url_edit, blink);
 
     // Tabs
     let mut spans = vec![];
@@ -307,7 +463,7 @@ fn draw_request(f: &mut Frame, app: &mut App, th: &Theme, area: Rect) {
                 .to_string(),
             ReqTab::Auth => o.req.auth.label().to_string(),
             ReqTab::Body => o.req.body.kind.label().to_string(),
-            ReqTab::Docs => String::new(),
+            ReqTab::Example | ReqTab::Docs => String::new(),
         };
         if t == ReqTab::Docs && o.req.docs.is_none() {
             continue;
@@ -338,6 +494,7 @@ fn draw_request(f: &mut Frame, app: &mut App, th: &Theme, area: Rect) {
         ReqTab::Headers => Some("Name: value per line · # disables a line".to_string()),
         ReqTab::Auth => Some(format!("type: {} · t to change", o.req.auth.label())),
         ReqTab::Body => Some(format!("type: {} · t to change", o.req.body.kind.label())),
+        ReqTab::Example => Some("spec sample · :example copies it into the body".to_string()),
         ReqTab::Docs => None,
     };
     let body_area = if let Some(h) = hint {
@@ -349,6 +506,16 @@ fn draw_request(f: &mut Frame, app: &mut App, th: &Theme, area: Rect) {
         content
     };
     match tab {
+        ReqTab::Example => {
+            let p = match example_lines {
+                Some(l) => Paragraph::new(l),
+                None => Paragraph::new(Span::styled(
+                    "No spec example. Imported requests with a body get one.",
+                    fg(th.dim),
+                )),
+            };
+            f.render_widget(p, body_area);
+        }
         ReqTab::Docs => {
             let t = o.req.docs.clone().unwrap_or_default();
             f.render_widget(Paragraph::new(t).wrap(Wrap { trim: false }), body_area);
@@ -361,12 +528,7 @@ fn draw_request(f: &mut Frame, app: &mut App, th: &Theme, area: Rect) {
         }
         _ => {
             if let Some(ed) = o.ed.tab_mut(tab) {
-                f.render_widget(
-                    EditorView::new(ed)
-                        .theme(editor_theme(th, content_edit))
-                        .wrap(true),
-                    body_area,
-                );
+                render_editor(f, ed, body_area, th, &vars, content_edit, blink);
             }
         }
     }
@@ -667,6 +829,7 @@ fn draw_confirm(f: &mut Frame, app: &App, th: &Theme, area: Rect) {
 }
 
 fn draw_vars(f: &mut Frame, app: &mut App, th: &Theme, area: Rect) {
+    let blink = app.cursor_on();
     let Some(v) = &mut app.vars else { return };
     let rect = popup_rect(area, 80, area.height * 3 / 5);
     f.render_widget(Clear, rect);
@@ -683,8 +846,9 @@ fn draw_vars(f: &mut Frame, app: &mut App, th: &Theme, area: Rect) {
         .style(Style::default().bg(th.bg).fg(th.fg));
     let inner = block.inner(rect);
     f.render_widget(block, rect);
+    tint_vars_page(&mut v.ed, th);
     f.render_widget(
-        EditorView::new(&mut v.ed).theme(editor_theme(th, true)),
+        EditorView::new(&mut v.ed).theme(editor_theme(th, blink)),
         inner,
     );
 }

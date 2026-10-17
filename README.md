@@ -102,6 +102,7 @@ Press `:` and type. Tab completes, and the list shows what each command does.
 | `:env [name]`, `:envnew <name>` | Switch to / create an environment |
 | `:set k=v`, `:secret k=v` | Set a variable / a secret in the active environment |
 | `:vars` | Edit the active environment line by line (`key=value`, `secret key=value`; `Ctrl-s` or `:w` saves, `:wq` saves and closes, `:q` or `Esc` closes) |
+| `:example` | Reset the body to the spec's example |
 | `:import <spec> [dir]` | Build a workspace from an OpenAPI or Swagger spec |
 | `:theme [name]` | Switch theme |
 | `:help` | Key reference |
@@ -115,9 +116,14 @@ Params     status=available          one key=value per line, "# " disables a lin
 Headers    Accept: application/json  one Name: value per line
 Auth       token: {{token}}          fields depend on the type (press t to change)
 Body       { "name": "doggie" }      json, text or form (key=value lines)
+Example    { "name": "doggie" }      read-only sample from the OpenAPI spec (:example copies it into Body)
 ```
 
 `Ctrl-e` in editor normal mode opens the buffer in `$EDITOR`.
+
+`{{vars}}` show their resolved value (red) when you're not on that line, and the raw `{{name}}` while the cursor is on the line. Unresolved ones stay as `{{name}}` in yellow.
+
+Beyond edtui's built-in motions, normal mode adds `F` `T` `;` `,` `^` `C`, and `d`/`c`/`y` with `$ 0 ^ e b f F t T ; ,` (for example `d$`, `dtB`, `cF"`). These custom operators aren't repeated by `.`.
 
 ## Workspaces
 
@@ -157,7 +163,7 @@ All registered workspaces are remembered in `~/.config/turly/workspaces.yaml`.
 - Tags become folders, operations become requests, in the spec's order.
 - `servers` become environments with a `base_url` variable. Path parameters become `{{vars}}` with example values.
 - Query and header parameters are listed, enabled when the spec marks them required.
-- JSON and form bodies are pre-filled from `example` values, or generated from the schema.
+- JSON and form bodies are pre-filled from the spec's `example`/`examples` (or a schema's `example`/`default`), else generated from the schema's types. The original stays in the Example tab.
 - Bearer, Basic and API key security schemes become auth, with secret variables to fill in.
 - Summaries and descriptions show up in each request's Docs tab.
 

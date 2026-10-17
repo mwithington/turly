@@ -482,6 +482,7 @@ pub fn import(text: &str) -> Result<Imported> {
 
             if let Some(rb) = op.get("requestBody") {
                 req.body = body_from(root, rb);
+                req.example = (req.body.kind != BodyKind::None).then(|| req.body.clone());
             }
             let (auth, secrets) = auth_from(root, op);
             req.auth = auth;

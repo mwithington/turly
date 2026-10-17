@@ -128,6 +128,11 @@ const CMDS: &[Cmd] = &[
         desc: "Save the response body to a file",
     },
     Cmd {
+        name: "example",
+        args: "",
+        desc: "Reset the body to the spec's example",
+    },
+    Cmd {
         name: "vars",
         args: "",
         desc: "Edit the active environment's variables line by line",
@@ -312,6 +317,7 @@ impl App {
             "curl" => self.act(Action::CopyCurl),
             "save" => self.cmd_save(arg),
             "vars" => self.open_vars(),
+            "example" => self.cmd_example(),
             "help" => self.mode = Mode::Help,
             other => self.err(format!("Unknown command: {other}")),
         }
@@ -434,6 +440,18 @@ impl App {
             Ok(()) => self.set_env(&slug(name)),
             Err(e) => self.err(e.to_string()),
         }
+    }
+
+    fn cmd_example(&mut self) {
+        let Some(o) = &mut self.open else {
+            return self.err("No request open");
+        };
+        let Some(ex) = o.req.example.clone() else {
+            return self.err("This request has no spec example");
+        };
+        o.req.body = ex;
+        o.ed = Editors::new(&o.req);
+        self.info("Body reset to the spec example");
     }
 
     fn cmd_set(&mut self, arg: &str, secret: bool) {

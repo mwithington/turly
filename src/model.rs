@@ -191,6 +191,9 @@ pub struct Request {
     pub body: Body,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub docs: Option<String>,
+    /// Body sample taken from the imported spec.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub example: Option<Body>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub order: Option<u32>,
     #[serde(default = "yes")]
@@ -214,6 +217,7 @@ impl Request {
             auth: Auth::None,
             body: Body::default(),
             docs: None,
+            example: None,
             order: None,
             follow_redirects: true,
             insecure: false,
