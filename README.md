@@ -17,7 +17,7 @@
 ## Features
 
 - **Three-pane TUI**: request tree, request editor, response viewer.
-- **Vim keys out of the box**: `hjkl`, `gg`/`G`, `Ctrl-w` pane focus, and a modal Vim editor (normal, insert, visual, `.` repeat) for URLs, params, headers, auth and bodies. Everything is remappable.
+- **Vim keys out of the box**: `hjkl`, `gg`/`G`, `Ctrl-w` pane focus, and a modal Vim editor (normal, insert, visual, `.` repeat) for URLs, params, headers, auth and bodies. Everything is remappable. The mouse works too: click folders, requests, tabs and fields, and scroll with the wheel (hold Shift for native text selection in most terminals).
 - **Command and search boxes**: `:` opens a centered command box that explains each command as you type (`:w` Save current request, `:qa` Quit out). `/` searches whichever pane has focus.
 - **Workspaces are plain directories**: one YAML file per request, folders for structure. Diff them, review them, commit them.
 - **Multiple workspaces**: open one with `turly <path>`, or switch with `:ws`.
@@ -175,6 +175,7 @@ Import creates a new workspace. Re-importing over an existing one is not support
 
 ```toml
 theme = "nord"
+mouse = true   # false keeps native terminal text selection
 
 # Remap or add keys. Chords are space separated.
 [keys]

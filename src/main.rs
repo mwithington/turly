@@ -15,7 +15,10 @@ mod workspace;
 use anyhow::{Result, bail};
 use app::{App, Msg};
 use clap::{Parser, Subcommand};
-use crossterm::event::{self, DisableBracketedPaste, EnableBracketedPaste, Event, KeyEventKind};
+use crossterm::event::{
+    self, DisableBracketedPaste, DisableMouseCapture, EnableBracketedPaste, EnableMouseCapture,
+    Event, KeyEventKind,
+};
 use std::path::PathBuf;
 use std::time::Duration;
 use workspace::{Workspace, registry, slug};
@@ -122,6 +125,7 @@ fn run_tui(rt: tokio::runtime::Runtime, path: Option<PathBuf>) -> Result<()> {
         Ok(c) => (c, None),
         Err(e) => (Default::default(), Some(format!("{e:#}"))),
     };
+    let mouse = cfg.mouse.unwrap_or(true);
     let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<Msg>();
     let mut app = App::new(ws, cfg, rt.handle().clone(), tx);
     if let Some(e) = cfg_err {
@@ -130,7 +134,13 @@ fn run_tui(rt: tokio::runtime::Runtime, path: Option<PathBuf>) -> Result<()> {
 
     let mut terminal = ratatui::init();
     crossterm::execute!(std::io::stdout(), EnableBracketedPaste)?;
+    if mouse {
+        crossterm::execute!(std::io::stdout(), EnableMouseCapture)?;
+    }
     let result = run_loop(&mut terminal, &mut app, &mut rx);
+    if mouse {
+        let _ = crossterm::execute!(std::io::stdout(), DisableMouseCapture);
+    }
     let _ = crossterm::execute!(std::io::stdout(), DisableBracketedPaste);
     ratatui::restore();
     result
@@ -147,6 +157,7 @@ fn run_loop(
             match event::read()? {
                 Event::Key(k) if k.kind != KeyEventKind::Release => app.on_key(k),
                 Event::Paste(s) => app.on_paste(&s),
+                Event::Mouse(m) => app.on_mouse(m),
                 _ => {}
             }
         }

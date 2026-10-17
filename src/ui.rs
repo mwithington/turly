@@ -37,6 +37,7 @@ fn method_color(m: Method, t: &Theme) -> Color {
 }
 
 pub fn draw(f: &mut Frame, app: &mut App) {
+    app.hit = Default::default();
     let th = app.theme.clone();
     let area = f.area();
     f.render_widget(
@@ -160,6 +161,7 @@ fn draw_tree(f: &mut Frame, app: &mut App, th: &Theme, area: Rect) {
     let block = pane(th, title, focused);
     let inner = block.inner(area);
     f.render_widget(block, area);
+    app.hit.tree = inner;
     let rows = app.rows();
     let h = inner.height as usize;
     if app.cursor < app.tree_offset {
@@ -400,6 +402,7 @@ fn draw_request(f: &mut Frame, app: &mut App, th: &Theme, area: Rect) {
     let block = pane(th, title, focused);
     let inner = block.inner(area);
     f.render_widget(block, area);
+    app.hit.req = inner;
     let [url_row, tabs_row, content] = Layout::vertical([
         Constraint::Length(1),
         Constraint::Length(1),
@@ -441,10 +444,12 @@ fn draw_request(f: &mut Frame, app: &mut App, th: &Theme, area: Rect) {
         )),
         lbl,
     );
+    app.hit.url = urlr;
     render_editor(f, &mut o.ed.url, urlr, th, &vars, url_edit, blink);
 
     // Tabs
     let mut spans = vec![];
+    let mut x = tabs_row.x;
     for t in ReqTab::ALL {
         let extra = match t {
             ReqTab::Params => o
@@ -483,6 +488,9 @@ fn draw_request(f: &mut Frame, app: &mut App, th: &Theme, area: Rect) {
         } else {
             fg(th.dim)
         };
+        let w = text.chars().count() as u16;
+        app.hit.tabs.push((Rect::new(x, tabs_row.y, w, 1), t));
+        x += w + 2;
         spans.push(Span::styled(text, st));
         spans.push(Span::raw("  "));
     }
@@ -528,6 +536,7 @@ fn draw_request(f: &mut Frame, app: &mut App, th: &Theme, area: Rect) {
         }
         _ => {
             if let Some(ed) = o.ed.tab_mut(tab) {
+                app.hit.content = body_area;
                 render_editor(f, ed, body_area, th, &vars, content_edit, blink);
             }
         }
@@ -569,6 +578,7 @@ fn draw_response(f: &mut Frame, app: &mut App, th: &Theme, area: Rect) {
     let block = pane(th, title, focused);
     let inner = block.inner(area);
     f.render_widget(block, area);
+    app.hit.resp = inner;
     if let Some(e) = &app.error {
         f.render_widget(
             Paragraph::new(Span::styled(e.clone(), fg(th.err))).wrap(Wrap { trim: false }),
@@ -628,6 +638,12 @@ fn draw_response(f: &mut Frame, app: &mut App, th: &Theme, area: Rect) {
             fg(th.info),
         ),
     ]);
+    let lead: usize = head_line.spans[..2].iter().map(Span::width).sum();
+    let bx = head.x + lead as u16;
+    app.hit.resp_tabs = vec![
+        (Rect::new(bx, head.y, 4, 1), RespTab::Body),
+        (Rect::new(bx + 6, head.y, 7, 1), RespTab::Headers),
+    ];
     f.render_widget(Paragraph::new(head_line), head);
 
     let h = body.height as usize;

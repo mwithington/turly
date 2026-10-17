@@ -17,6 +17,8 @@ pub fn config_dir() -> PathBuf {
 #[serde(deny_unknown_fields)]
 pub struct Config {
     pub theme: Option<String>,
+    /// Mouse support (default on); off keeps native terminal text selection.
+    pub mouse: Option<bool>,
     /// Extra or overriding key bindings, e.g. `"ctrl-s" = "save"`.
     #[serde(default)]
     pub keys: BTreeMap<String, String>,

@@ -9,11 +9,12 @@ use crate::theme::Theme;
 use crate::vimext::Vim;
 use crate::workspace::{Node, Workspace, registry};
 use anyhow::Result;
-use crossterm::event::{KeyCode, KeyEvent};
+use crossterm::event::{KeyCode, KeyEvent, MouseButton, MouseEvent, MouseEventKind};
 use edtui::actions::search::{
     AppendCharToSearch, FindNext, FindPrevious, SelectCurrentSearch, StartSearch, StopSearch,
 };
 use edtui::{EditorEventHandler, EditorMode, EditorState, Lines};
+use ratatui::layout::{Position, Rect};
 use ratatui::text::Line;
 use std::collections::{BTreeMap, HashSet};
 use std::path::{Path, PathBuf};
@@ -273,6 +274,18 @@ pub struct VarsEd {
     armed: bool,
 }
 
+/// Clickable regions, refreshed on every draw.
+#[derive(Default)]
+pub struct Hit {
+    pub tree: Rect,
+    pub req: Rect,
+    pub url: Rect,
+    pub tabs: Vec<(Rect, ReqTab)>,
+    pub content: Rect,
+    pub resp: Rect,
+    pub resp_tabs: Vec<(Rect, RespTab)>,
+}
+
 pub struct Status {
     pub text: String,
     pub err: bool,
@@ -286,6 +299,7 @@ pub struct App {
     pub handler: EditorEventHandler,
     pub vars: Option<VarsEd>,
     pub vim: Vim,
+    pub hit: Hit,
     pub var_cache: BTreeMap<String, String>,
     pub blink: Instant,
     pub mode: Mode,
@@ -343,6 +357,7 @@ impl App {
             handler: EditorEventHandler::default(),
             vars: None,
             vim: Vim::default(),
+            hit: Hit::default(),
             var_cache: BTreeMap::new(),
             blink: Instant::now(),
             mode: Mode::Normal,
@@ -1180,6 +1195,129 @@ impl App {
         });
         self.vim = vim;
         self.after_edit();
+    }
+
+    // ---- mouse ----
+
+    pub fn on_mouse(&mut self, me: MouseEvent) {
+        match self.mode {
+            Mode::Vars => {
+                if let Some(v) = &mut self.vars {
+                    self.handler.on_mouse_event(me, &mut v.ed);
+                }
+            }
+            Mode::Help => {
+                if matches!(me.kind, MouseEventKind::Down(_)) {
+                    self.mode = Mode::Normal;
+                }
+            }
+            Mode::Normal | Mode::Edit => {
+                self.blink = Instant::now();
+                let p = Position::new(me.column, me.row);
+                match me.kind {
+                    MouseEventKind::Down(MouseButton::Left) => self.click(p, me),
+                    MouseEventKind::ScrollUp => self.wheel(p, me, false),
+                    MouseEventKind::ScrollDown => self.wheel(p, me, true),
+                    MouseEventKind::Drag(MouseButton::Left)
+                    | MouseEventKind::Up(MouseButton::Left)
+                        if self.mode == Mode::Edit =>
+                    {
+                        self.with_editor(|h, ed| h.on_mouse_event(me, ed));
+                        self.after_edit();
+                    }
+                    _ => {}
+                }
+                self.refresh_vars();
+            }
+            _ => {}
+        }
+    }
+
+    fn leave_edit(&mut self) {
+        if self.mode == Mode::Edit {
+            self.mode = Mode::Normal;
+            self.after_edit();
+        }
+    }
+
+    fn click(&mut self, p: Position, me: MouseEvent) {
+        let h = &self.hit;
+        let tab = h.tabs.iter().find(|(r, _)| r.contains(p)).map(|(_, t)| *t);
+        let resp_tab = h
+            .resp_tabs
+            .iter()
+            .find(|(r, _)| r.contains(p))
+            .map(|(_, t)| *t);
+        let (in_tree, in_url, in_content, in_resp) = (
+            h.tree.contains(p),
+            h.url.contains(p),
+            h.content.contains(p),
+            h.resp.contains(p),
+        );
+        self.status = None;
+        if in_tree {
+            self.leave_edit();
+            self.focus = Focus::Tree;
+            let i = self.tree_offset + (p.y - self.hit.tree.y) as usize;
+            let rows = self.rows();
+            let Some(row) = rows.get(i) else { return };
+            self.cursor = i;
+            match &row.kind {
+                RowKind::Req { path, .. } => self.load_request(path),
+                _ => self.open_selected(),
+            }
+        } else if let Some(t) = tab {
+            self.leave_edit();
+            self.focus = Focus::Request;
+            self.req_field = ReqField::Content;
+            self.req_tab = t;
+        } else if in_url || in_content {
+            self.focus = Focus::Request;
+            self.req_field = if in_url {
+                ReqField::Url
+            } else {
+                ReqField::Content
+            };
+            self.start_edit();
+            self.with_editor(|h, ed| h.on_mouse_event(me, ed));
+            self.after_edit();
+        } else if in_resp {
+            self.leave_edit();
+            self.focus = Focus::Response;
+            if let Some(t) = resp_tab {
+                self.resp_tab = t;
+                self.resp_scroll = 0;
+            }
+        } else if self.hit.req.contains(p) {
+            self.leave_edit();
+            self.focus = Focus::Request;
+        }
+    }
+
+    fn wheel(&mut self, p: Position, me: MouseEvent, down: bool) {
+        const STEP: usize = 3;
+        if self.hit.tree.contains(p) {
+            let max = self.rows().len().saturating_sub(1);
+            self.cursor = if down {
+                (self.cursor + STEP).min(max)
+            } else {
+                self.cursor.saturating_sub(STEP)
+            };
+        } else if self.hit.resp.contains(p) {
+            let max = self.resp_len().saturating_sub(1);
+            self.resp_scroll = if down {
+                (self.resp_scroll + STEP).min(max)
+            } else {
+                self.resp_scroll.saturating_sub(STEP)
+            };
+        } else if self.hit.content.contains(p) {
+            let tab = self.req_tab;
+            if let Some(o) = &mut self.open
+                && let Some(ed) = o.ed.tab_mut(tab)
+            {
+                self.handler.on_mouse_event(me, ed);
+            }
+        }
     }
 
     // ---- :vars editor ----
