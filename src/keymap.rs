@@ -115,6 +115,7 @@ const DEFAULTS: &[(&str, Action)] = &[
     ("ctrl-w k", Action::FocusUp),
     ("ctrl-w j", Action::FocusDown),
     ("ctrl-w w", Action::FocusNext),
+    ("ctrl-w ctrl-w", Action::FocusNext),
     ("ctrl-h", Action::FocusLeft),
     ("ctrl-l", Action::FocusRight),
     ("ctrl-k", Action::FocusUp),

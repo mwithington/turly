@@ -875,6 +875,7 @@ fn draw_help(f: &mut Frame, th: &Theme, area: Rect) {
         ("gg  G", "top / bottom"),
         ("Ctrl-d  Ctrl-u", "half page down / up"),
         ("Ctrl-w hjkl", "focus pane (Ctrl-hjkl also works)"),
+        ("Ctrl-w w", "next pane"),
         ("Tab  Shift-Tab", "next / previous tab"),
         ("Enter", "open and send the request"),
         ("i  a", "edit the URL or the open tab (Vim editor)"),
