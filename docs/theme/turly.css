@@ -1,0 +1,347 @@
+/* Turly docs theme: warm charcoal + amber, matching the app's default palette. */
+
+:root {
+    --font-body: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+    --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    --amber: #e8893a;
+    --cream: #f4e6d3;
+    --content-max-width: 820px;
+}
+
+.coal {
+    --bg: #1b1815;
+    --fg: #e4ded5;
+    --sidebar-bg: #14120f;
+    --sidebar-fg: #b9b1a6;
+    --sidebar-non-existant: #5d564d;
+    --sidebar-active: #e8893a;
+    --sidebar-spacer: #2a2622;
+    --scrollbar: #4a443d;
+    --icons: #7d766d;
+    --icons-hover: #e4ded5;
+    --links: #f0a05a;
+    --inline-code-color: #f4c48f;
+    --theme-popup-bg: #14120f;
+    --theme-popup-border: #3a342d;
+    --theme-hover: #2a2622;
+    --quote-bg: #221e1a;
+    --quote-border: #e8893a;
+    --table-border-color: #332e28;
+    --table-header-bg: #221e1a;
+    --table-alternate-bg: #1e1b17;
+    --searchbar-border-color: #3a342d;
+    --searchbar-bg: #221e1a;
+    --searchbar-fg: #e4ded5;
+    --searchbar-shadow-color: #00000066;
+    --searchresults-header-fg: #7d766d;
+    --searchresults-border-color: #332e28;
+    --searchresults-li-bg: #221e1a;
+    --search-mark-bg: #7a4a14;
+    --color-scheme: dark;
+}
+
+.light {
+    --bg: #fbfaf8;
+    --fg: #2a2724;
+    --sidebar-bg: #f3efe9;
+    --sidebar-fg: #4a443d;
+    --sidebar-non-existant: #b9b3aa;
+    --sidebar-active: #b8570f;
+    --sidebar-spacer: #e4ded5;
+    --scrollbar: #b9b3aa;
+    --icons: #8a847c;
+    --icons-hover: #2a2724;
+    --links: #b8570f;
+    --inline-code-color: #8f4410;
+    --theme-popup-bg: #fbfaf8;
+    --theme-popup-border: #e4ded5;
+    --theme-hover: #f3efe9;
+    --quote-bg: #f6f1ea;
+    --quote-border: #e8893a;
+    --table-border-color: #e4ded5;
+    --table-header-bg: #f3efe9;
+    --table-alternate-bg: #faf7f3;
+    --searchbar-border-color: #d6cfc4;
+    --searchbar-bg: #ffffff;
+    --searchbar-fg: #2a2724;
+    --searchbar-shadow-color: #00000022;
+    --searchresults-header-fg: #8a847c;
+    --searchresults-border-color: #e4ded5;
+    --searchresults-li-bg: #f6f1ea;
+    --search-mark-bg: #f2c48f;
+    --color-scheme: light;
+}
+
+/* Only the two Turly themes are offered. */
+#theme-list li:has(#rust),
+#theme-list li:has(#navy),
+#theme-list li:has(#ayu) {
+    display: none;
+}
+
+html {
+    font-family: var(--font-body);
+    -webkit-font-smoothing: antialiased;
+}
+
+body {
+    font-size: 1.6rem;
+    line-height: 1.7;
+}
+
+code,
+pre,
+.hljs {
+    font-family: var(--font-mono) !important;
+    font-feature-settings: "calt" 0;
+}
+
+/* Headings */
+.content h1,
+.content h2,
+.content h3,
+.content h4 {
+    font-weight: 650;
+    letter-spacing: -0.015em;
+    line-height: 1.25;
+}
+
+.content h1 {
+    font-size: 3.4rem;
+    margin-top: 0;
+    padding-bottom: 0.6em;
+    border-bottom: 1px solid var(--table-border-color);
+}
+
+.content h2 {
+    font-size: 2.3rem;
+    margin-top: 2.4em;
+    padding-bottom: 0.3em;
+    border-bottom: 1px solid var(--table-border-color);
+}
+
+.content h3 {
+    font-size: 1.85rem;
+    margin-top: 1.9em;
+}
+
+.content a.header,
+.content a.header:link,
+.content a.header:visited {
+    color: inherit;
+}
+
+.content a {
+    text-decoration: none;
+    border-bottom: 1px solid color-mix(in srgb, var(--links) 35%, transparent);
+    transition: border-color 0.15s;
+}
+
+.content a:hover {
+    text-decoration: none;
+    border-bottom-color: var(--links);
+}
+
+.content a.header {
+    border-bottom: 0;
+}
+
+/* Code */
+:not(pre) > code {
+    padding: 0.15em 0.4em;
+    border-radius: 5px;
+    background: color-mix(in srgb, var(--fg) 9%, transparent);
+    font-size: 0.86em;
+}
+
+pre {
+    border: 1px solid var(--table-border-color);
+    border-radius: 8px;
+    box-shadow: none;
+}
+
+pre > code {
+    padding: 1.2rem 1.5rem !important;
+    font-size: 0.88em;
+}
+
+/* Tables */
+table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    border: 1px solid var(--table-border-color);
+    border-radius: 8px;
+    overflow: hidden;
+    font-size: 0.93em;
+}
+
+table thead th {
+    text-align: left;
+    font-weight: 600;
+    padding: 0.7em 1em;
+    border: 0;
+    border-bottom: 1px solid var(--table-border-color);
+}
+
+table tbody td {
+    padding: 0.65em 1em;
+    border: 0;
+    border-top: 1px solid var(--table-border-color);
+    vertical-align: top;
+}
+
+table tbody tr:first-child td {
+    border-top: 0;
+}
+
+/* Quotes read as callouts */
+blockquote {
+    margin: 1.6em 0;
+    padding: 0.9em 1.3em;
+    border-radius: 0 8px 8px 0;
+    border: 0;
+    border-left: 3px solid var(--quote-border);
+}
+
+blockquote p:first-child { margin-top: 0; }
+blockquote p:last-child { margin-bottom: 0; }
+
+/* Sidebar */
+.sidebar {
+    font-size: 1.45rem;
+}
+
+.sidebar .sidebar-scrollbox::before {
+    content: "Turly";
+    display: block;
+    padding: 4px 0 18px 46px;
+    margin-bottom: 12px;
+    font-weight: 700;
+    font-size: 2rem;
+    letter-spacing: -0.02em;
+    color: var(--fg);
+    line-height: 36px;
+    background: url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNTYgMjU2IiByb2xlPSJpbWciIGFyaWEtbGFiZWw9IlR1cmx5Ij4KICA8ZGVmcz4KICAgIDxtYXNrIGlkPSJjcmVzY2VudCI+CiAgICAgIDxyZWN0IHdpZHRoPSIyNTYiIGhlaWdodD0iMjU2IiBmaWxsPSIjZmZmIi8+CiAgICAgIDxjaXJjbGUgY3g9IjE1NCIgY3k9IjExMiIgcj0iNjQiIGZpbGw9IiMwMDAiLz4KICAgIDwvbWFzaz4KICA8L2RlZnM+CiAgPHJlY3Qgd2lkdGg9IjI1NiIgaGVpZ2h0PSIyNTYiIHJ4PSI1NiIgZmlsbD0iIzFiMTgxNSIvPgogIDxjaXJjbGUgY3g9IjExNiIgY3k9IjEzNiIgcj0iNzYiIGZpbGw9IiNlODg5M2EiIG1hc2s9InVybCgjY3Jlc2NlbnQpIi8+CiAgPGcgZmlsbD0iI2Y0ZTZkMyI+CiAgICA8cGF0aCBkPSJNMTg2IDU4bDQgMTIgMTIgNC0xMiA0LTQgMTItNC0xMi0xMi00IDEyLTR6Ii8+CiAgICA8cGF0aCBkPSJNMjE0IDEzMGwzIDggOCAzLTggMy0zIDgtMy04LTgtMyA4LTN6Ii8+CiAgICA8cGF0aCBkPSJNMTY4IDE5NmwyLjUgNyA3IDIuNS03IDIuNS0yLjUgNy0yLjUtNy03LTIuNSA3LTIuNXoiLz4KICAgIDxjaXJjbGUgY3g9IjE1MCIgY3k9IjQwIiByPSIzIi8+CiAgICA8Y2lyY2xlIGN4PSIyMDYiIGN5PSIxODgiIHI9IjIuNSIvPgogICAgPGNpcmNsZSBjeD0iMTM0IiBjeT0iMTEyIiByPSIyLjUiLz4KICAgIDxjaXJjbGUgY3g9IjkyIiBjeT0iNDAiIHI9IjIiLz4KICA8L2c+Cjwvc3ZnPgo=") no-repeat left center / 34px 34px;
+    border-bottom: 1px solid var(--sidebar-spacer);
+}
+
+.chapter li.part-title {
+    margin: 1.8em 0 0.4em;
+    font-size: 0.78em;
+    font-weight: 600;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    color: var(--sidebar-non-existant);
+}
+
+.chapter li a {
+    border-radius: 6px;
+    padding: 0.15em 0.5em;
+    margin-left: -0.5em;
+}
+
+.chapter li a.active {
+    font-weight: 600;
+    background: color-mix(in srgb, var(--sidebar-active) 12%, transparent);
+}
+
+.chapter li a:hover {
+    color: var(--sidebar-active);
+}
+
+/* Top bar */
+#menu-bar {
+    border-bottom-color: var(--table-border-color);
+}
+
+.menu-title {
+    font-weight: 600;
+    letter-spacing: -0.01em;
+}
+
+#searchbar {
+    border-radius: 8px;
+}
+
+/* Prev/next */
+.nav-chapters {
+    border-radius: 8px;
+    transition: color 0.15s;
+}
+
+/* Landing page */
+.hero {
+    text-align: center;
+    padding: 2.5rem 0 1rem;
+}
+
+.hero img {
+    width: 112px;
+    height: 112px;
+    border-radius: 26px;
+    box-shadow: 0 10px 40px #e8893a22;
+}
+
+.hero h1 {
+    border: 0;
+    font-size: 4.4rem;
+    margin: 1.2rem 0 0.4rem;
+    padding: 0;
+}
+
+.hero p {
+    color: var(--sidebar-fg);
+    font-size: 1.15em;
+    max-width: 34em;
+    margin: 0 auto 1.4rem;
+}
+
+.cta a,
+.cta a:link {
+    display: inline-block;
+    margin: 0.3rem 0.35rem;
+    padding: 0.55em 1.3em;
+    border-radius: 8px;
+    border: 1px solid var(--amber);
+    font-weight: 600;
+    font-size: 0.95em;
+}
+
+.cta a.primary {
+    background: var(--amber);
+    color: #1b1815;
+}
+
+.cta a:hover {
+    filter: brightness(1.1);
+}
+
+.features {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 1.2rem;
+    margin: 2rem 0;
+}
+
+.features div {
+    padding: 1.2rem 1.4rem;
+    border: 1px solid var(--table-border-color);
+    border-radius: 10px;
+    background: var(--quote-bg);
+}
+
+.features h3 {
+    margin: 0 0 0.3em;
+    font-size: 1.15em;
+}
+
+.features p {
+    margin: 0;
+    font-size: 0.92em;
+    color: var(--sidebar-fg);
+}
+
+@media (max-width: 620px) {
+    .hero h1 { font-size: 3.4rem; }
+}
