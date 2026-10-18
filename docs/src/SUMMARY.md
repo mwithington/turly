@@ -6,6 +6,7 @@
 - [Keys and Vim motions](keys.md)
 - [Commands](commands.md)
 - [Editing requests](editing.md)
+- [Authentication](authentication.md)
 - [Workspaces](workspaces.md)
 - [Environments and variables](environments.md)
 - [OpenAPI import](openapi.md)

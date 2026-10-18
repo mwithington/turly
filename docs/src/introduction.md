@@ -7,7 +7,7 @@ Turly is a Postman-style API client that lives in your terminal. It has Vim keys
 - **Workspaces are plain directories**: one YAML file per request. Diff them, review them, commit them.
 - **OpenAPI 3.x and Swagger 2.0 import** builds a whole workspace from a spec.
 - **Environments and variables**, with secrets kept out of git.
-- **Auth helpers**: Bearer, Basic and API key.
+- **Auth**: Bearer, Basic, API key and OAuth2 (client credentials, password, browser sign-in), with a workspace default.
 - **Syntax-highlighted responses**, response search, request history and curl export.
 - **Themes**: ten presets plus your own TOML themes.
 

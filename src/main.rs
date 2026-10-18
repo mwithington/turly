@@ -5,6 +5,7 @@ mod highlight;
 mod http;
 mod keymap;
 mod model;
+mod oauth;
 mod openapi;
 mod theme;
 mod ui;

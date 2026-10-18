@@ -19,13 +19,15 @@ clap = { version = "4.6.7", features = ["derive"] }
 crossterm = "0.29.0"
 dirs = "7.0.0"
 edtui = { version = "0.11.7", default-features = false, features = ["arboard", "mouse-support", "system-editor"] }
+getrandom = "0.4.3"
 ratatui = "0.30.2"
 reqwest = { version = "0.13.5", default-features = false, features = ["rustls", "json", "cookies", "gzip", "deflate", "brotli"] }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
 serde_yaml_ng = "0.10.0"
+sha2 = "0.11.1"
 syntect = { version = "5.3.0", default-features = false, features = ["default-syntaxes", "default-themes", "regex-fancy"] }
-tokio = { version = "1.53.3", features = ["rt-multi-thread", "macros", "sync"] }
+tokio = { version = "1.53.3", features = ["rt-multi-thread", "macros", "sync", "net", "io-util", "time"] }
 toml = "1.1.8"
 url = "2.5.8"
 

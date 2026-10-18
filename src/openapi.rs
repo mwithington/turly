@@ -1,7 +1,7 @@
 //! OpenAPI 3.x / Swagger 2.0 import. Swagger 2.0 is upconverted to 3.0 in memory,
 //! then a single mapper turns operations into requests.
 
-use crate::model::{Auth, Body, BodyKind, Env, Method, Param, Request};
+use crate::model::{Auth, Body, BodyKind, Env, Grant, Method, OAuth, Param, Request};
 use crate::workspace::{Workspace, slug};
 use anyhow::{Context, Result, bail};
 use serde_json::{Map, Value, json};
@@ -107,6 +107,22 @@ fn upconvert(mut doc: Value) -> Value {
             match v["type"].as_str() {
                 Some("basic") => out.insert(k.clone(), json!({"type": "http", "scheme": "basic"})),
                 Some("apiKey") => out.insert(k.clone(), v.clone()),
+                Some("oauth2") => {
+                    let flow = match v["flow"].as_str() {
+                        Some("accessCode") => "authorizationCode",
+                        Some("application") => "clientCredentials",
+                        Some("password") => "password",
+                        _ => "implicit",
+                    };
+                    out.insert(
+                        k.clone(),
+                        json!({"type": "oauth2", "flows": {flow: {
+                            "authorizationUrl": v["authorizationUrl"],
+                            "tokenUrl": v["tokenUrl"],
+                            "scopes": v["scopes"],
+                        }}}),
+                    )
+                }
                 _ => None,
             };
         }
@@ -371,8 +387,46 @@ fn auth_from(root: &Value, op: &Value) -> (Auth, Vec<&'static str>) {
             },
             vec!["api_key"],
         ),
+        (Some("oauth2"), _, _) => oauth_from(scheme),
         _ => (Auth::None, vec![]),
     }
+}
+
+/// OAuth2 scheme -> the best supported flow (code, then client credentials, then password).
+fn oauth_from(scheme: &Value) -> (Auth, Vec<&'static str>) {
+    let flows = &scheme["flows"];
+    let pick = [
+        ("authorizationCode", Grant::Code),
+        ("clientCredentials", Grant::ClientCredentials),
+        ("password", Grant::Password),
+    ]
+    .into_iter()
+    .find(|(k, _)| flows[*k].is_object());
+    let Some((k, grant)) = pick else {
+        return (Auth::None, vec![]);
+    };
+    let f = &flows[k];
+    let mut scopes: Vec<&str> = f["scopes"]
+        .as_object()
+        .map(|m| m.keys().map(String::as_str).collect())
+        .unwrap_or_default();
+    scopes.sort();
+    let mut o = OAuth {
+        grant,
+        token_url: f["tokenUrl"].as_str().unwrap_or("").into(),
+        auth_url: f["authorizationUrl"].as_str().unwrap_or("").into(),
+        client_id: "{{client_id}}".into(),
+        client_secret: "{{client_secret}}".into(),
+        scope: scopes.join(" "),
+        ..Default::default()
+    };
+    let mut vars = vec!["client_id", "client_secret"];
+    if grant == Grant::Password {
+        o.username = "{{username}}".into();
+        o.password = "{{password}}".into();
+        vars.extend(["username", "password"]);
+    }
+    (Auth::Oauth2(o), vars)
 }
 
 fn server_url(server: &Value) -> String {
@@ -696,5 +750,31 @@ definitions:
         insta::assert_snapshot!(summary(
             &import(include_str!("../tests/fixtures/petstore-swagger2.json")).unwrap()
         ));
+    }
+}
+
+#[cfg(test)]
+mod oauth_tests {
+    use super::*;
+
+    #[test]
+    fn oauth2_scheme_imports() {
+        let spec = r#"{"openapi":"3.0.0","info":{"title":"T","version":"1"},
+          "security":[{"o":[]}],
+          "paths":{"/a":{"get":{"responses":{"200":{"description":"ok"}}}},
+                   "/b":{"get":{"security":[],"responses":{"200":{"description":"ok"}}}}},
+          "components":{"securitySchemes":{"o":{"type":"oauth2","flows":{
+            "clientCredentials":{"tokenUrl":"https://x/token","scopes":{"b":"","a":""}}}}}}}"#;
+        let imp = import(spec).unwrap();
+        let auths: Vec<_> = imp.requests.iter().map(|r| r.1.auth.clone()).collect();
+        let Auth::Oauth2(o) = &auths[0] else {
+            panic!("{auths:?}")
+        };
+        assert_eq!(
+            (o.token_url.as_str(), o.scope.as_str()),
+            ("https://x/token", "a b")
+        );
+        assert_eq!(auths[1], Auth::None);
+        assert!(imp.envs[0].1.secrets.contains(&"client_secret".to_string()));
     }
 }

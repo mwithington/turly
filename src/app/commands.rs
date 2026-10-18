@@ -1,7 +1,7 @@
 //! The `:` command line: table, completion and execution.
 
 use super::*;
-use crate::model::Env;
+use crate::model::{Auth, Env};
 use crate::openapi;
 use crate::workspace::slug;
 
@@ -131,6 +131,16 @@ const CMDS: &[Cmd] = &[
         name: "example",
         args: "",
         desc: "Reset the body to the spec's example",
+    },
+    Cmd {
+        name: "authws",
+        args: "[clear]",
+        desc: "Make this request's auth the workspace default (inherit)",
+    },
+    Cmd {
+        name: "logout",
+        args: "",
+        desc: "Forget cached OAuth2 tokens",
     },
     Cmd {
         name: "vars",
@@ -318,6 +328,11 @@ impl App {
             "save" => self.cmd_save(arg),
             "vars" => self.open_vars(),
             "example" => self.cmd_example(),
+            "authws" => self.cmd_authws(arg),
+            "logout" => {
+                self.tokens.lock().unwrap().clear();
+                self.info("Cleared cached OAuth2 tokens");
+            }
             "help" => self.mode = Mode::Help,
             other => self.err(format!("Unknown command: {other}")),
         }
@@ -438,6 +453,32 @@ impl App {
         env.vars.insert("base_url".into(), String::new());
         match ws.save_env(&slug(name), &env) {
             Ok(()) => self.set_env(&slug(name)),
+            Err(e) => self.err(e.to_string()),
+        }
+    }
+
+    fn cmd_authws(&mut self, arg: &str) {
+        let auth = if arg == "clear" {
+            Auth::None
+        } else {
+            let Some(o) = &mut self.open else {
+                return self.err("No request open");
+            };
+            o.sync();
+            o.req.auth.clone()
+        };
+        if auth == Auth::Inherit {
+            return self.err("This request inherits; open one with its own auth");
+        }
+        let Some(ws) = self.ws.as_mut() else {
+            return self.err("No workspace");
+        };
+        ws.meta.auth = auth;
+        let label = ws.meta.auth.label();
+        match ws.save_meta() {
+            Ok(()) => self.info(format!(
+                "Workspace auth: {label} (used by 'inherit' requests)"
+            )),
             Err(e) => self.err(e.to_string()),
         }
     }
