@@ -10,7 +10,7 @@ homepage = "https://github.com/mwithington/turly"
 readme = "README.md"
 keywords = ["api", "http", "tui", "postman", "openapi"]
 categories = ["command-line-utilities", "development-tools", "web-programming::http-client"]
-exclude = ["/.github", "/assets", "/tests/fixtures"]
+exclude = ["/.github", "/assets", "/docs","/tests/fixtures"]
 
 [dependencies]
 anyhow = "1.0.104"
