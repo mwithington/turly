@@ -51,6 +51,16 @@ impl Response {
     }
 }
 
+/// Add `Authorization: Bearer` unless the request already sets one.
+pub fn add_bearer(headers: &mut Vec<(String, String)>, token: &str) {
+    if !headers
+        .iter()
+        .any(|(k, _)| k.eq_ignore_ascii_case("authorization"))
+    {
+        headers.push(("Authorization".into(), format!("Bearer {token}")));
+    }
+}
+
 pub fn prepare(req: &Request, vars: &BTreeMap<String, String>) -> Result<Prepared> {
     let sub = |s: &str| substitute(s, vars);
     let mut url = url::Url::parse(&sub(&req.url))

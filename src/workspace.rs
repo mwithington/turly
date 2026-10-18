@@ -1,6 +1,6 @@
 //! A workspace is a plain directory: `turly.yaml`, `requests/**.yaml`, `environments/*.yaml`.
 
-use crate::model::{Env, Meta, Request};
+use crate::model::{Auth, Env, Meta, Request};
 use anyhow::{Context, Result, bail};
 use std::collections::BTreeMap;
 use std::fs;
@@ -91,6 +91,7 @@ impl Workspace {
             name: name.into(),
             timeout_secs: 30,
             active_env: None,
+            auth: Default::default(),
         };
         write_yaml(&root.join(META_FILE), &meta)?;
         let mut ws = Workspace {
@@ -118,6 +119,18 @@ impl Workspace {
 
     pub fn save_meta(&self) -> Result<()> {
         write_yaml(&self.root.join(META_FILE), &self.meta)
+    }
+
+    /// `req` with `inherit` auth replaced by the workspace default.
+    pub fn effective(&self, req: &Request) -> Request {
+        let mut r = req.clone();
+        if r.auth == Auth::Inherit {
+            r.auth = match &self.meta.auth {
+                Auth::Inherit => Auth::None,
+                a => a.clone(),
+            };
+        }
+        r
     }
 
     pub fn requests_dir(&self) -> PathBuf {
@@ -372,6 +385,24 @@ mod tests {
                 .unwrap()
                 .contains("s3")
         );
+    }
+
+    #[test]
+    fn inherit_uses_workspace_auth() {
+        let d = tempfile::tempdir().unwrap();
+        let mut ws = Workspace::init(d.path(), "demo").unwrap();
+        let req = Request::new("x");
+        assert_eq!(ws.effective(&req).auth, Auth::None);
+        ws.meta.auth = Auth::Oauth2(crate::model::OAuth {
+            token_url: "https://t".into(),
+            ..Default::default()
+        });
+        ws.save_meta().unwrap();
+        let ws = Workspace::open(d.path()).unwrap();
+        assert_eq!(ws.effective(&req).auth, ws.meta.auth);
+        let mut own = req.clone();
+        own.auth = Auth::None;
+        assert_eq!(ws.effective(&own).auth, Auth::None);
     }
 
     #[test]

@@ -4,7 +4,7 @@ use crate::config::Config;
 use crate::highlight::{Highlighter, Lang};
 use crate::http::{self, Response};
 use crate::keymap::{Action, Key, KeyMap, Lookup};
-use crate::model::{Auth, Method, Param, Request};
+use crate::model::{Auth, Grant, Method, OAuth, Param, Request};
 use crate::theme::Theme;
 use crate::vimext::Vim;
 use crate::workspace::{Node, Workspace, registry};
@@ -93,6 +93,7 @@ pub enum Msg {
         result: Result<Response, String>,
     },
     Imported(Result<PathBuf, String>),
+    Info(String),
 }
 
 pub struct Editors {
@@ -146,13 +147,30 @@ pub fn parse_pairs(text: &str, sep: char) -> Vec<Param> {
 
 fn fmt_auth(a: &Auth) -> String {
     match a {
-        Auth::None => String::new(),
+        Auth::None | Auth::Inherit => String::new(),
         Auth::Bearer { token } => format!("token: {token}"),
         Auth::Basic { username, password } => format!("username: {username}\npassword: {password}"),
         Auth::Apikey { key, value, query } => format!(
             "key: {key}\nvalue: {value}\nin: {}",
             if *query { "query" } else { "header" }
         ),
+        Auth::Oauth2(o) => {
+            let mut out = format!(
+                "grant: {}\ntoken_url: {}\nauth_url: {}\nclient_id: {}\nclient_secret: {}\nscope: {}\nusername: {}\npassword: {}",
+                o.grant.label(),
+                o.token_url,
+                o.auth_url,
+                o.client_id,
+                o.client_secret,
+                o.scope,
+                o.username,
+                o.password
+            );
+            if o.port != 0 {
+                out.push_str(&format!("\nport: {}", o.port));
+            }
+            out
+        }
     }
 }
 
@@ -165,7 +183,7 @@ fn parse_auth(base: &Auth, text: &str) -> Auth {
             .unwrap_or_default()
     };
     match base {
-        Auth::None => Auth::None,
+        Auth::None | Auth::Inherit => base.clone(),
         Auth::Bearer { .. } => Auth::Bearer {
             token: get("token"),
         },
@@ -178,6 +196,17 @@ fn parse_auth(base: &Auth, text: &str) -> Auth {
             value: get("value"),
             query: get("in") == "query",
         },
+        Auth::Oauth2(_) => Auth::Oauth2(OAuth {
+            grant: Grant::parse(&get("grant")),
+            token_url: get("token_url"),
+            auth_url: get("auth_url"),
+            client_id: get("client_id"),
+            client_secret: get("client_secret"),
+            scope: get("scope"),
+            username: get("username"),
+            password: get("password"),
+            port: get("port").parse().unwrap_or(0),
+        }),
     }
 }
 
@@ -329,6 +358,7 @@ pub struct App {
     pub quit: bool,
     pub confirm: Option<String>,
     pub jar: Arc<reqwest::cookie::Jar>,
+    pub tokens: crate::oauth::Cache,
     pub rt: Handle,
     pub tx: UnboundedSender<Msg>,
 }
@@ -387,6 +417,7 @@ impl App {
             quit: false,
             confirm: None,
             jar: Arc::new(reqwest::cookie::Jar::default()),
+            tokens: Default::default(),
             rt,
             tx,
         };
@@ -623,18 +654,39 @@ impl App {
         };
         open.sync();
         let vars = ws.resolved_vars(env.as_deref());
-        match http::prepare(&open.req, &vars) {
-            Ok(prepared) => {
+        let req = ws.effective(&open.req);
+        match http::prepare(&req, &vars) {
+            Ok(mut prepared) => {
                 self.sending = true;
                 self.error = None;
-                let (tx, jar, timeout, p) = (
+                let oauth = match &req.auth {
+                    Auth::Oauth2(o) => Some(crate::oauth::resolve(o, &vars)),
+                    _ => None,
+                };
+                let (tx, jar, timeout, tokens) = (
                     self.tx.clone(),
                     self.jar.clone(),
                     ws.meta.timeout_secs,
-                    prepared.clone(),
+                    self.tokens.clone(),
                 );
                 self.rt.spawn(async move {
-                    let result = http::send(p, jar, timeout)
+                    if let Some(o) = oauth {
+                        let prompt = |url: &str| {
+                            let _ = tx.send(Msg::Info(format!(
+                                "Sign in in your browser (opened automatically): {url}"
+                            )));
+                            crate::oauth::open_browser(url);
+                        };
+                        match crate::oauth::bearer(&o, &tokens, prompt).await {
+                            Ok(t) => http::add_bearer(&mut prepared.headers, &t),
+                            Err(e) => {
+                                let result = Err(format!("{e:#}"));
+                                let _ = tx.send(Msg::Response { prepared, result });
+                                return;
+                            }
+                        }
+                    }
+                    let result = http::send(prepared.clone(), jar, timeout)
                         .await
                         .map_err(|e| format!("{e:#}"));
                     let _ = tx.send(Msg::Response { prepared, result });
@@ -681,6 +733,7 @@ impl App {
                 Err(e) => self.err(e.to_string()),
             },
             Msg::Imported(Err(e)) => self.err(format!("Import failed: {e}")),
+            Msg::Info(s) => self.info(s),
         }
     }
 
@@ -1050,7 +1103,7 @@ impl App {
         };
         open.sync();
         let vars = ws.resolved_vars(env.as_deref());
-        match http::prepare(&open.req, &vars) {
+        match http::prepare(&ws.effective(&open.req), &vars) {
             Ok(p) => {
                 copy_to_clipboard(&crate::curl::to_curl(&p));
                 self.info("Copied curl command to clipboard");

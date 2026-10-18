@@ -7,4 +7,15 @@ language = "en"
 [output.html]
 git-repository-url = "https://github.com/mwithington/turly"
 edit-url-template = "https://github.com/mwithington/turly/edit/main/docs/{path}"
-default-theme = "navy"
+site-url = "/turly/"
+default-theme = "coal"
+preferred-dark-theme = "coal"
+additional-css = ["theme/turly.css"]
+
+[output.html.search]
+limit-results = 20
+use-boolean-and = true
+
+[output.html.fold]
+enable = true
+level = 1

@@ -1,5 +1,6 @@
 # Limitations
 
+- OAuth2 covers client credentials, password and authorization code. Tokens live in memory only. See [Authentication](authentication.md).
 - No scripting, tests or assertions, and no Postman collection import yet.
 - HTTP only: no WebSocket, GraphQL or gRPC.
 - The cookie jar lasts for the session and isn't saved to disk.

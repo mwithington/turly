@@ -23,7 +23,7 @@
 - **Multiple workspaces**: open one with `turly <path>`, or switch with `:ws`.
 - **OpenAPI and Swagger import**: build a whole workspace from an OpenAPI 3.x or Swagger 2.0 spec (JSON or YAML, file or URL).
 - **Environments and variables**: `{{base_url}}`, `{{$OS_ENV_VAR}}`, and secrets kept out of git.
-- **Auth helpers**: Bearer, Basic and API key.
+- **Auth**: Bearer, Basic, API key and OAuth2 (client credentials, password, browser sign-in), with a workspace default.
 - **Syntax-highlighted responses** (via `syntect`), pretty-printed JSON, response search, request history, curl export.
 - **Themes**: ten presets plus your own TOML themes.
 
@@ -69,6 +69,7 @@ Full docs live at **https://mwithington.github.io/turly**:
 - [Keys and Vim motions](https://mwithington.github.io/turly/keys.html)
 - [Commands](https://mwithington.github.io/turly/commands.html)
 - [Workspaces](https://mwithington.github.io/turly/workspaces.html)
+- [Authentication](https://mwithington.github.io/turly/authentication.html)
 - [Environments and variables](https://mwithington.github.io/turly/environments.html)
 - [OpenAPI import](https://mwithington.github.io/turly/openapi.html)
 - [Configuration](https://mwithington.github.io/turly/configuration.html) and [themes](https://mwithington.github.io/turly/themes.html)

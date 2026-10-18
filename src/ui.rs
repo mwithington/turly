@@ -528,11 +528,19 @@ fn draw_request(f: &mut Frame, app: &mut App, th: &Theme, area: Rect) {
             let t = o.req.docs.clone().unwrap_or_default();
             f.render_widget(Paragraph::new(t).wrap(Wrap { trim: false }), body_area);
         }
-        ReqTab::Auth if matches!(o.req.auth, Auth::None) => {
-            f.render_widget(
-                Paragraph::new(Span::styled("No auth. Press t to pick a type.", fg(th.dim))),
-                body_area,
-            );
+        ReqTab::Auth if matches!(o.req.auth, Auth::None | Auth::Inherit) => {
+            let msg = match (&o.req.auth, &app.ws) {
+                (Auth::Inherit, Some(ws)) if ws.meta.auth != Auth::None => format!(
+                    "Inherits the workspace auth ({}). Press t to pick a type.",
+                    ws.meta.auth.label()
+                ),
+                (Auth::Inherit, _) => {
+                    "Inherits the workspace auth (none set). :authws sets one; t picks a type."
+                        .into()
+                }
+                _ => "No auth. Press t to pick a type.".into(),
+            };
+            f.render_widget(Paragraph::new(Span::styled(msg, fg(th.dim))), body_area);
         }
         _ => {
             if let Some(ed) = o.ed.tab_mut(tab) {

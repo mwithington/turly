@@ -103,6 +103,63 @@ pub enum Auth {
         #[serde(default)]
         query: bool,
     },
+    Oauth2(OAuth),
+    /// Use the workspace's default auth (`auth:` in `turly.yaml`).
+    Inherit,
+}
+
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum Grant {
+    #[default]
+    ClientCredentials,
+    Password,
+    Code,
+}
+
+impl Grant {
+    pub fn label(self) -> &'static str {
+        match self {
+            Grant::ClientCredentials => "client_credentials",
+            Grant::Password => "password",
+            Grant::Code => "code",
+        }
+    }
+
+    pub fn parse(s: &str) -> Grant {
+        match s {
+            "password" => Grant::Password,
+            "code" | "authorization_code" => Grant::Code,
+            _ => Grant::ClientCredentials,
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Default)]
+pub struct OAuth {
+    #[serde(default)]
+    pub grant: Grant,
+    #[serde(default)]
+    pub token_url: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub auth_url: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub client_id: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub client_secret: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub scope: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub username: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub password: String,
+    /// Loopback port for the `code` grant (0 = 8765).
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub port: u16,
+}
+
+fn is_zero(n: &u16) -> bool {
+    *n == 0
 }
 
 impl Auth {
@@ -112,10 +169,12 @@ impl Auth {
             Auth::Bearer { .. } => "bearer",
             Auth::Basic { .. } => "basic",
             Auth::Apikey { .. } => "apikey",
+            Auth::Oauth2(_) => "oauth2",
+            Auth::Inherit => "inherit",
         }
     }
 
-    /// Cycle none -> bearer -> basic -> apikey.
+    /// Cycle none -> bearer -> basic -> apikey -> oauth2 -> inherit.
     pub fn cycle(&self) -> Auth {
         match self {
             Auth::None => Auth::Bearer {
@@ -130,7 +189,13 @@ impl Auth {
                 value: "{{api_key}}".into(),
                 query: false,
             },
-            Auth::Apikey { .. } => Auth::None,
+            Auth::Apikey { .. } => Auth::Oauth2(OAuth {
+                client_id: "{{client_id}}".into(),
+                client_secret: "{{client_secret}}".into(),
+                ..Default::default()
+            }),
+            Auth::Oauth2(_) => Auth::Inherit,
+            Auth::Inherit => Auth::None,
         }
     }
 }
@@ -214,7 +279,7 @@ impl Request {
             url: "{{base_url}}/".into(),
             params: vec![],
             headers: vec![],
-            auth: Auth::None,
+            auth: Auth::Inherit,
             body: Body::default(),
             docs: None,
             example: None,
@@ -242,6 +307,13 @@ pub struct Meta {
     pub timeout_secs: u64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub active_env: Option<String>,
+    /// Default auth for requests set to `inherit`.
+    #[serde(default, skip_serializing_if = "is_none_auth")]
+    pub auth: Auth,
+}
+
+fn is_none_auth(a: &Auth) -> bool {
+    *a == Auth::None
 }
 
 fn default_timeout() -> u64 {
