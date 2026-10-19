@@ -306,6 +306,10 @@ pub struct VarsEd {
 /// Clickable regions, refreshed on every draw.
 #[derive(Default)]
 pub struct Hit {
+    pub main: Rect,
+    pub right: Rect,
+    pub side_edge: Rect,
+    pub split_edge: Rect,
     pub tree: Rect,
     pub req: Rect,
     pub url: Rect,
@@ -320,7 +324,17 @@ pub struct Status {
     pub err: bool,
 }
 
+#[derive(Clone, Copy, PartialEq)]
+pub enum Drag {
+    Side,
+    Split,
+}
+
 pub struct App {
+    /// Sidebar width in columns (None = automatic) and request pane height in percent.
+    pub side_w: Option<u16>,
+    pub split: u16,
+    pub drag: Option<Drag>,
     pub ws: Option<Workspace>,
     pub theme: Theme,
     pub keys: KeyMap,
@@ -402,6 +416,9 @@ impl App {
             history: vec![],
             cursor: 0,
             tree_offset: 0,
+            side_w: None,
+            split: 52,
+            drag: None,
             filter: String::new(),
             open: None,
             resp: None,
@@ -906,6 +923,32 @@ impl App {
             Action::CycleKind => self.cycle_kind(),
             Action::NextEnv => self.cycle_env(),
             Action::CopyCurl => self.copy_curl(),
+            Action::CopyResponse => self.copy_response(),
+            Action::PaneWider | Action::PaneNarrower => {
+                let w = (self.hit.side_edge.x + 1).saturating_sub(self.hit.main.x);
+                let grow_tree = (self.focus == Focus::Tree) == (a == Action::PaneWider);
+                self.set_side_w(if grow_tree {
+                    w + 2
+                } else {
+                    w.saturating_sub(2)
+                });
+            }
+            Action::PaneTaller | Action::PaneShorter => match self.focus {
+                Focus::Tree => self.info("The sidebar spans the full height"),
+                f => {
+                    let up = (f == Focus::Request) == (a == Action::PaneTaller);
+                    self.split = (if up {
+                        self.split + 4
+                    } else {
+                        self.split.saturating_sub(4)
+                    })
+                    .clamp(15, 85);
+                }
+            },
+            Action::PaneReset => {
+                self.side_w = None;
+                self.split = 52;
+            }
         }
     }
 
@@ -1095,6 +1138,48 @@ impl App {
         }
     }
 
+    fn set_side_w(&mut self, w: u16) {
+        let max = self.hit.main.width.saturating_sub(20).max(12);
+        self.side_w = Some(w.clamp(12, max));
+    }
+
+    /// Resize a pane while its border is being dragged.
+    fn drag_to(&mut self, p: Position) {
+        match self.drag {
+            Some(Drag::Side) => self.set_side_w((p.x + 1).saturating_sub(self.hit.main.x)),
+            Some(Drag::Split) => {
+                let r = self.hit.right;
+                if r.height > 0 {
+                    let rows = (p.y + 1).saturating_sub(r.y) as u32;
+                    self.split = ((rows * 100 / r.height as u32) as u16).clamp(15, 85);
+                }
+            }
+            None => {}
+        }
+    }
+
+    fn copy_response(&mut self) {
+        let Some(r) = &self.resp else {
+            return self.err("No response yet");
+        };
+        let text = match self.resp_tab {
+            RespTab::Headers => r
+                .headers
+                .iter()
+                .map(|(k, v)| format!("{k}: {v}"))
+                .collect::<Vec<_>>()
+                .join("\n"),
+            RespTab::Body => r.pretty.clone(),
+        };
+        let what = if self.resp_tab == RespTab::Headers {
+            "headers"
+        } else {
+            "body"
+        };
+        copy_to_clipboard(&text);
+        self.info(format!("Copied response {what} ({} bytes)", text.len()));
+    }
+
     fn copy_curl(&mut self) {
         let Some(ws) = self.need_ws() else { return };
         let env = self.env_name();
@@ -1268,6 +1353,18 @@ impl App {
                 self.blink = Instant::now();
                 let p = Position::new(me.column, me.row);
                 match me.kind {
+                    MouseEventKind::Down(MouseButton::Left) if self.hit.side_edge.contains(p) => {
+                        self.drag = Some(Drag::Side)
+                    }
+                    MouseEventKind::Down(MouseButton::Left) if self.hit.split_edge.contains(p) => {
+                        self.drag = Some(Drag::Split)
+                    }
+                    MouseEventKind::Drag(MouseButton::Left) if self.drag.is_some() => {
+                        self.drag_to(p)
+                    }
+                    MouseEventKind::Up(MouseButton::Left) if self.drag.is_some() => {
+                        self.drag = None
+                    }
                     MouseEventKind::Down(MouseButton::Left) => self.click(p, me),
                     MouseEventKind::ScrollUp => self.wheel(p, me, false),
                     MouseEventKind::ScrollDown => self.wheel(p, me, true),

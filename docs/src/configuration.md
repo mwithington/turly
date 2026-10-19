@@ -15,4 +15,4 @@ mouse = true   # false keeps native terminal text selection
 
 ## Actions
 
-`up down left right top bottom half_down half_up focus_left focus_right focus_up focus_down focus_next next_tab prev_tab open edit send save command search search_next search_prev cancel quit help new_request delete_request cycle_method cycle_kind next_env copy_curl`
+`up down left right top bottom half_down half_up focus_left focus_right focus_up focus_down focus_next next_tab prev_tab open edit send save command search search_next search_prev cancel quit help new_request delete_request cycle_method cycle_kind next_env copy_curl copy_response pane_wider pane_narrower pane_taller pane_shorter pane_reset`

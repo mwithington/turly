@@ -19,7 +19,8 @@
 | `dd` | Delete a request (asks first) |
 | `m` / `t` | Cycle the method / the auth or body type |
 | `e` | Next environment |
-| `y` | Copy the request as curl |
+| `y` / `Y` | Copy the request as curl / copy the response (body, or headers on that tab) |
+| `Ctrl-w` `<` `>` `+` `-` | Resize panes (`Ctrl-w =` resets) |
 | `?` | Key reference |
 | `q` / `Ctrl-c` | Quit |
 
@@ -35,7 +36,7 @@ These custom operators aren't repeated by `.`.
 
 ## Mouse
 
-Click folders, requests, tabs and fields, drag to select, and scroll with the wheel. Hold Shift for the terminal's native text selection, or set `mouse = false` in the [config](configuration.md).
+Click folders, requests, tabs and fields, drag to select, and scroll with the wheel. Drag the border between panes to resize them. Hold Shift for the terminal's native text selection, or set `mouse = false` in the [config](configuration.md).
 
 ## Remapping
 

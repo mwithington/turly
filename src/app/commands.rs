@@ -118,6 +118,11 @@ const CMDS: &[Cmd] = &[
         desc: "Switch color theme",
     },
     Cmd {
+        name: "copy",
+        args: "",
+        desc: "Copy the response (body, or headers on that tab)",
+    },
+    Cmd {
         name: "curl",
         args: "",
         desc: "Copy the request as a curl command",
@@ -325,6 +330,7 @@ impl App {
                 }
             }
             "curl" => self.act(Action::CopyCurl),
+            "copy" => self.act(Action::CopyResponse),
             "save" => self.cmd_save(arg),
             "vars" => self.open_vars(),
             "example" => self.cmd_example(),

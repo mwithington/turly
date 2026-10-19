@@ -54,11 +54,23 @@ pub fn draw(f: &mut Frame, app: &mut App) {
     if app.ws.is_none() {
         draw_splash(f, &th, main);
     } else {
-        let w = (main.width / 4).clamp(24, 44);
+        let auto = (main.width / 4).clamp(24, 44);
+        let w = app
+            .side_w
+            .unwrap_or(auto)
+            .clamp(12, main.width.saturating_sub(20).max(12));
+        let split = app.split.clamp(15, 85);
         let [side, right] =
             Layout::horizontal([Constraint::Length(w), Constraint::Min(10)]).areas(main);
-        let [req, resp] =
-            Layout::vertical([Constraint::Percentage(52), Constraint::Percentage(48)]).areas(right);
+        let [req, resp] = Layout::vertical([
+            Constraint::Percentage(split),
+            Constraint::Percentage(100 - split),
+        ])
+        .areas(right);
+        app.hit.main = main;
+        app.hit.right = right;
+        app.hit.side_edge = Rect::new(side.right().saturating_sub(1), side.y, 2, side.height);
+        app.hit.split_edge = Rect::new(right.x, req.bottom().saturating_sub(1), right.width, 2);
         draw_tree(f, app, &th, side);
         draw_request(f, app, &th, req);
         draw_response(f, app, &th, resp);
@@ -953,7 +965,11 @@ fn draw_help(f: &mut Frame, th: &Theme, area: Rect) {
         ("dd", "delete request"),
         ("m  t", "cycle method / auth or body type"),
         ("e", "next environment"),
-        ("y", "copy request as curl"),
+        ("y  Y", "copy request as curl / copy the response"),
+        (
+            "Ctrl-w < > + -",
+            "resize panes (= resets); drag borders too",
+        ),
         ("q  Ctrl-c", "quit"),
     ];
     let rect = popup_rect(area, 70, ROWS.len() as u16 + 4);
