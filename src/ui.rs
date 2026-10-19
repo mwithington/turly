@@ -339,37 +339,71 @@ fn put_row(buf: &mut Buffer, area: Rect, i: u16, cells: &[(char, Style)], th: &T
     }
 }
 
-/// `key=value` coloring for the :vars page: green key, white value.
+/// Values longer than this are shown cut off on the :vars page, except on the cursor row.
+const VALUE_MAX: usize = 20;
+
+/// `key=value` coloring for a :vars line as inclusive (from, to, color) char ranges.
+fn vars_spans(line: &str, th: &Theme) -> Vec<(usize, usize, Color)> {
+    let n = line.chars().count();
+    if n == 0 {
+        return vec![];
+    }
+    if line.trim_start().starts_with('#') {
+        return vec![(0, n - 1, th.dim)];
+    }
+    let mut out = vec![];
+    let kw = if line.starts_with("secret ") { 7 } else { 0 };
+    if kw > 0 {
+        out.push((0, 5, th.warn));
+    }
+    match line.chars().position(|c| c == '=') {
+        Some(eq) => {
+            if eq > kw {
+                out.push((kw, eq - 1, th.ok));
+            }
+            out.push((eq, eq, th.dim));
+            if eq + 1 < n {
+                out.push((eq + 1, n - 1, th.fg));
+            }
+        }
+        None if n > kw => out.push((kw, n - 1, th.ok)),
+        None => {}
+    }
+    out
+}
+
 fn tint_vars_page(ed: &mut EditorState, th: &Theme) {
     let mut marks = vec![];
     for (row, line) in text_of(ed).lines().enumerate() {
-        let n = line.chars().count();
-        if n == 0 {
-            continue;
-        }
-        if line.trim_start().starts_with('#') {
-            marks.push(hl(row, 0, n - 1, fg(th.dim)));
-            continue;
-        }
-        let kw = if line.starts_with("secret ") { 7 } else { 0 };
-        if kw > 0 {
-            marks.push(hl(row, 0, 5, fg(th.warn)));
-        }
-        match line.chars().position(|c| c == '=') {
-            Some(eq) => {
-                if eq > kw {
-                    marks.push(hl(row, kw, eq - 1, fg(th.ok)));
-                }
-                marks.push(hl(row, eq, eq, fg(th.dim)));
-                if eq + 1 < n {
-                    marks.push(hl(row, eq + 1, n - 1, fg(th.fg)));
-                }
-            }
-            None if n > kw => marks.push(hl(row, kw, n - 1, fg(th.ok))),
-            None => {}
+        for (from, to, c) in vars_spans(line, th) {
+            marks.push(hl(row, from, to, fg(c)));
         }
     }
     ed.set_highlights(marks);
+}
+
+/// A :vars line as styled cells, its value cut to `VALUE_MAX` chars plus `…`; None if it already fits.
+fn vars_cut_cells(line: &str, th: &Theme) -> Option<Vec<(char, Style)>> {
+    let eq = line.chars().position(|c| c == '=')?;
+    let n = line.chars().count();
+    if n - eq - 1 <= VALUE_MAX {
+        return None;
+    }
+    let spans = vars_spans(line, th);
+    let mut cells: Vec<(char, Style)> = line
+        .chars()
+        .take(eq + 1 + VALUE_MAX)
+        .enumerate()
+        .map(|(i, c)| {
+            let col = spans
+                .iter()
+                .find(|(f, t, _)| (*f..=*t).contains(&i))
+                .map_or(th.fg, |s| s.2);
+            (c, fg(col))
+        })
+        .collect();
+    cells.push(('…', fg(th.dim)));
+    Some(cells)
 }
 
 fn draw_request(f: &mut Frame, app: &mut App, th: &Theme, area: Rect) {
@@ -855,7 +889,13 @@ fn draw_confirm(f: &mut Frame, app: &App, th: &Theme, area: Rect) {
 fn draw_vars(f: &mut Frame, app: &mut App, th: &Theme, area: Rect) {
     let blink = app.cursor_on();
     let Some(v) = &mut app.vars else { return };
-    let rect = popup_rect(area, 80, area.height * 3 / 5);
+    let text = text_of(&v.ed);
+    // Widen for the cursor row so a long value can be read in full.
+    let need = text
+        .lines()
+        .nth(v.ed.cursor.row)
+        .map_or(0, |l| l.chars().count() + 3);
+    let rect = popup_rect(area, 80.max(need as u16), area.height * 3 / 5);
     f.render_widget(Clear, rect);
     let block = Block::bordered()
         .border_style(fg(th.accent))
@@ -872,9 +912,26 @@ fn draw_vars(f: &mut Frame, app: &mut App, th: &Theme, area: Rect) {
     f.render_widget(block, rect);
     tint_vars_page(&mut v.ed, th);
     f.render_widget(
-        EditorView::new(&mut v.ed).theme(editor_theme(th, blink)),
+        EditorView::new(&mut v.ed)
+            .theme(editor_theme(th, blink))
+            .wrap(false),
         inner,
     );
+    let (ox, oy) = v.ed.viewport_offset();
+    let buf = f.buffer_mut();
+    for (i, line) in text
+        .lines()
+        .skip(oy)
+        .take(inner.height as usize)
+        .enumerate()
+    {
+        if oy + i == v.ed.cursor.row {
+            continue;
+        }
+        if let Some(cells) = vars_cut_cells(line, th) {
+            put_row(buf, inner, i as u16, &cells[ox.min(cells.len())..], th);
+        }
+    }
 }
 
 fn draw_help(f: &mut Frame, th: &Theme, area: Rect) {
@@ -934,6 +991,19 @@ mod tests {
     use crate::workspace::Workspace;
     use ratatui::Terminal;
     use ratatui::backend::TestBackend;
+
+    #[test]
+    fn long_values_are_cut() {
+        let th = Theme::preset("turly").unwrap();
+        let cut =
+            |l: &str| vars_cut_cells(l, &th).map(|c| c.iter().map(|x| x.0).collect::<String>());
+        assert_eq!(cut("a=short"), None);
+        assert_eq!(cut("a=01234567890123456789"), None);
+        assert_eq!(
+            cut("secret tok=0123456789012345678901234"),
+            Some("secret tok=01234567890123456789…".into())
+        );
+    }
 
     fn render(app: &mut App) -> String {
         let mut t = Terminal::new(TestBackend::new(110, 30)).unwrap();
