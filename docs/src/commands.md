@@ -7,6 +7,7 @@ Press `:` and type. `Tab` completes, and the list shows what each command does.
 | `:w` / `:wq` | Save / save and quit |
 | `:q` / `:q!` / `:qa` | Quit (warns on unsaved changes) / quit and discard / quit out |
 | `:new [name]`, `:mkdir <name>`, `:rm`, `:dup`, `:rename <name>`, `:discard` | Manage requests and folders |
+| `:copy` | Copy the response (body, or headers on that tab) |
 | `:send`, `:method <M>`, `:curl`, `:save <path>` | Send, set the method, copy as curl, save the response body |
 | `:ws <path\|name>`, `:wsnew <path>` | Switch to / create a workspace |
 | `:env [name]`, `:envnew <name>` | Switch to / create an environment |

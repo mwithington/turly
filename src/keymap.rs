@@ -53,6 +53,12 @@ pub enum Action {
     CycleKind,
     NextEnv,
     CopyCurl,
+    CopyResponse,
+    PaneWider,
+    PaneNarrower,
+    PaneTaller,
+    PaneShorter,
+    PaneReset,
 }
 
 const NAMES: &[(&str, Action)] = &[
@@ -88,6 +94,12 @@ const NAMES: &[(&str, Action)] = &[
     ("cycle_kind", Action::CycleKind),
     ("next_env", Action::NextEnv),
     ("copy_curl", Action::CopyCurl),
+    ("copy_response", Action::CopyResponse),
+    ("pane_wider", Action::PaneWider),
+    ("pane_narrower", Action::PaneNarrower),
+    ("pane_taller", Action::PaneTaller),
+    ("pane_shorter", Action::PaneShorter),
+    ("pane_reset", Action::PaneReset),
 ];
 
 impl Action {
@@ -116,6 +128,11 @@ const DEFAULTS: &[(&str, Action)] = &[
     ("ctrl-w j", Action::FocusDown),
     ("ctrl-w w", Action::FocusNext),
     ("ctrl-w ctrl-w", Action::FocusNext),
+    ("ctrl-w >", Action::PaneWider),
+    ("ctrl-w <", Action::PaneNarrower),
+    ("ctrl-w +", Action::PaneTaller),
+    ("ctrl-w -", Action::PaneShorter),
+    ("ctrl-w =", Action::PaneReset),
     ("ctrl-h", Action::FocusLeft),
     ("ctrl-l", Action::FocusRight),
     ("ctrl-k", Action::FocusUp),
@@ -141,6 +158,7 @@ const DEFAULTS: &[(&str, Action)] = &[
     ("t", Action::CycleKind),
     ("e", Action::NextEnv),
     ("y", Action::CopyCurl),
+    ("Y", Action::CopyResponse),
 ];
 
 pub fn parse_key(s: &str) -> Result<Key> {
@@ -230,6 +248,18 @@ mod tests {
         let gg = parse_chord("g g").unwrap();
         assert!(matches!(m.lookup(&gg), Lookup::Action(Action::Top)));
         assert!(matches!(m.lookup(&parse_chord("z").unwrap()), Lookup::None));
+    }
+
+    #[test]
+    fn resize_and_copy_defaults() {
+        let m = km();
+        for (k, a) in [
+            ("ctrl-w >", Action::PaneWider),
+            ("ctrl-w =", Action::PaneReset),
+            ("Y", Action::CopyResponse),
+        ] {
+            assert!(matches!(m.lookup(&parse_chord(k).unwrap()), Lookup::Action(x) if x == a));
+        }
     }
 
     #[test]
