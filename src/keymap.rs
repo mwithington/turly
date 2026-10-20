@@ -59,6 +59,9 @@ pub enum Action {
     PaneTaller,
     PaneShorter,
     PaneReset,
+    Workspaces,
+    CollapseAll,
+    ExpandAll,
 }
 
 const NAMES: &[(&str, Action)] = &[
@@ -100,6 +103,9 @@ const NAMES: &[(&str, Action)] = &[
     ("pane_taller", Action::PaneTaller),
     ("pane_shorter", Action::PaneShorter),
     ("pane_reset", Action::PaneReset),
+    ("workspaces", Action::Workspaces),
+    ("collapse_all", Action::CollapseAll),
+    ("expand_all", Action::ExpandAll),
 ];
 
 impl Action {
@@ -159,6 +165,9 @@ const DEFAULTS: &[(&str, Action)] = &[
     ("e", Action::NextEnv),
     ("y", Action::CopyCurl),
     ("Y", Action::CopyResponse),
+    ("W", Action::Workspaces),
+    ("z M", Action::CollapseAll),
+    ("z R", Action::ExpandAll),
 ];
 
 pub fn parse_key(s: &str) -> Result<Key> {
@@ -247,7 +256,7 @@ mod tests {
         assert!(matches!(m.lookup(&g), Lookup::Prefix));
         let gg = parse_chord("g g").unwrap();
         assert!(matches!(m.lookup(&gg), Lookup::Action(Action::Top)));
-        assert!(matches!(m.lookup(&parse_chord("z").unwrap()), Lookup::None));
+        assert!(matches!(m.lookup(&parse_chord("x").unwrap()), Lookup::None));
     }
 
     #[test]

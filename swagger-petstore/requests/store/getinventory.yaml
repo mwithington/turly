@@ -1,0 +1,17 @@
+name: getInventory
+method: GET
+url: '{{base_url}}/store/inventory'
+auth:
+  type: apikey
+  key: api_key
+  value: '{{api_key}}'
+  query: false
+body:
+  type: none
+  content: ''
+docs: |-
+  Returns pet inventories by status
+
+  Returns a map of status codes to quantities
+order: 9
+follow_redirects: true

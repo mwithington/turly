@@ -41,6 +41,7 @@ pub enum Mode {
     Confirm,
     Help,
     Vars,
+    Picker,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -267,10 +268,23 @@ impl Open {
 
 #[derive(Clone, Debug)]
 pub enum RowKind {
-    Dir { path: PathBuf, open: bool },
-    Req { path: PathBuf, method: Method },
-    HistDir { open: bool },
+    Dir {
+        path: PathBuf,
+        open: bool,
+    },
+    Req {
+        path: PathBuf,
+        method: Method,
+    },
+    HistDir {
+        open: bool,
+    },
     Hist(usize),
+    Workspace {
+        path: PathBuf,
+        open: bool,
+        active: bool,
+    },
 }
 
 #[derive(Clone, Debug)]
@@ -307,6 +321,7 @@ pub struct VarsEd {
 #[derive(Default)]
 pub struct Hit {
     pub main: Rect,
+    pub picker: Rect,
     pub right: Rect,
     pub side_edge: Rect,
     pub split_edge: Rect,
@@ -330,13 +345,27 @@ pub enum Drag {
     Split,
 }
 
+pub struct Picker {
+    pub items: Vec<(String, PathBuf)>,
+    pub sel: usize,
+    pub offset: usize,
+}
+
 pub struct App {
+    /// Folder Turly was launched in, and the workspaces found in it.
+    pub scope_root: Option<PathBuf>,
+    pub scope: Vec<(String, PathBuf)>,
+    /// Expanded workspace rows (scope paths) and their loaded trees.
+    pub expanded: HashSet<PathBuf>,
+    pub trees: BTreeMap<PathBuf, Vec<Node>>,
+    pub picker: Option<Picker>,
     /// Sidebar width in columns (None = automatic) and request pane height in percent.
     pub side_w: Option<u16>,
     pub split: u16,
     pub drag: Option<Drag>,
     pub ws: Option<Workspace>,
     pub theme: Theme,
+    theme_backup: Option<Theme>,
     pub keys: KeyMap,
     pub hl: Highlighter,
     pub handler: EditorEventHandler,
@@ -396,6 +425,7 @@ impl App {
         let mut app = App {
             ws: None,
             theme,
+            theme_backup: None,
             keys,
             hl: Highlighter::new(),
             handler: EditorEventHandler::default(),
@@ -433,6 +463,11 @@ impl App {
             status: None,
             quit: false,
             confirm: None,
+            picker: None,
+            scope_root: None,
+            scope: vec![],
+            expanded: HashSet::new(),
+            trees: BTreeMap::new(),
             jar: Arc::new(reqwest::cookie::Jar::default()),
             tokens: Default::default(),
             rt,
@@ -473,6 +508,27 @@ impl App {
 
     // ---- workspace / tree ----
 
+    /// Show the workspaces inside `root` as top-level tree rows (when there are several).
+    pub fn set_scope(&mut self, root: &Path) {
+        self.scope_root = root.canonicalize().ok();
+        self.rescan_scope();
+        self.reset_expanded();
+        self.reload_tree();
+    }
+
+    fn rescan_scope(&mut self) {
+        let Some(root) = &self.scope_root else { return };
+        self.scope = crate::workspace::discover(root)
+            .into_iter()
+            .map(|p| {
+                let name = Workspace::open(&p)
+                    .map(|w| w.meta.name)
+                    .unwrap_or_else(|_| "?".into());
+                (name, p)
+            })
+            .collect();
+    }
+
     pub fn set_workspace(&mut self, ws: Workspace) {
         let _ = registry::add(&ws.root);
         self.open = None;
@@ -482,8 +538,109 @@ impl App {
         self.filter.clear();
         self.cursor = 0;
         self.ws = Some(ws);
+        self.rescan_scope();
+        self.reset_expanded();
         self.refresh_vars();
         self.reload_tree();
+    }
+
+    /// Only the active workspace expanded.
+    fn reset_expanded(&mut self) {
+        self.expanded.clear();
+        self.trees.clear();
+        let active = self
+            .scope
+            .iter()
+            .find(|(_, p)| self.is_active(p))
+            .map(|(_, p)| p.clone());
+        self.expanded.extend(active);
+    }
+
+    /// Make the workspace at `path` the active one, keeping the tree as it is.
+    pub fn activate_workspace(&mut self, path: &Path) {
+        if self.is_active(path) {
+            return;
+        }
+        if self.open.as_mut().is_some_and(|o| {
+            o.sync();
+            o.dirty()
+        }) {
+            return self.err("Unsaved changes. Use :w to save or :discard to drop them");
+        }
+        match Workspace::open(path) {
+            Ok(ws) => {
+                let _ = registry::add(&ws.root);
+                self.open = None;
+                self.resp = None;
+                self.error = None;
+                self.ws = Some(ws);
+                self.refresh_vars();
+                self.reload_tree();
+            }
+            Err(e) => self.err(e.to_string()),
+        }
+    }
+
+    fn reload_expanded(&mut self) {
+        let keep: Vec<PathBuf> = self.expanded.iter().cloned().collect();
+        self.trees.retain(|p, _| keep.contains(p));
+        for p in keep {
+            match Workspace::open(&p).and_then(|w| w.tree()) {
+                Ok(n) => {
+                    self.trees.insert(p, n);
+                }
+                Err(e) => self.err(e.to_string()),
+            }
+        }
+    }
+
+    /// Workspace row at or above the cursor.
+    fn cursor_workspace(&self) -> Option<PathBuf> {
+        let rows = self.rows();
+        rows.iter()
+            .take(self.cursor + 1)
+            .rev()
+            .find_map(|r| match &r.kind {
+                RowKind::Workspace { path, .. } => Some(path.clone()),
+                _ => None,
+            })
+    }
+
+    fn cursor_to_workspace(&mut self, path: &Path) {
+        let at = self
+            .rows()
+            .iter()
+            .position(|r| matches!(&r.kind, RowKind::Workspace { path: p, .. } if p == path));
+        if let Some(i) = at {
+            self.cursor = i;
+        }
+    }
+
+    pub fn expand_workspace(&mut self, path: &Path, on: bool) {
+        if on {
+            self.expanded.insert(path.to_path_buf());
+        } else {
+            self.expanded.remove(path);
+        }
+        self.reload_expanded();
+        self.cursor_to_workspace(path);
+    }
+
+    /// Collapse or expand every workspace row (`z M` / `z R`).
+    fn set_all_expanded(&mut self, on: bool) {
+        if !self.multi() {
+            return;
+        }
+        let at = self.cursor_workspace();
+        self.expanded = if on {
+            self.scope.iter().map(|(_, p)| p.clone()).collect()
+        } else {
+            HashSet::new()
+        };
+        self.reload_expanded();
+        if let Some(p) = at {
+            self.cursor_to_workspace(&p);
+        }
     }
 
     pub fn reload_tree(&mut self) {
@@ -493,11 +650,56 @@ impl App {
             Err(e) => self.err(e.to_string()),
         }
         self.history = ws.history(50);
+        self.reload_expanded();
         let n = self.rows().len();
         self.cursor = self.cursor.min(n.saturating_sub(1));
     }
 
+    /// True when the tree lists several workspaces (the active one is among them).
+    fn multi(&self) -> bool {
+        self.ws
+            .as_ref()
+            .is_some_and(|w| self.scope.iter().any(|(_, p)| same_dir(p, &w.root)))
+            && self.scope.len() > 1
+            && self.filter.is_empty()
+    }
+
+    fn is_active(&self, p: &Path) -> bool {
+        self.ws.as_ref().is_some_and(|w| same_dir(p, &w.root))
+    }
+
     pub fn rows(&self) -> Vec<Row> {
+        if !self.multi() {
+            return self.ws_rows();
+        }
+        let mut out = vec![];
+        for (name, path) in &self.scope {
+            let (open, active) = (self.expanded.contains(path), self.is_active(path));
+            out.push(Row {
+                depth: 0,
+                name: name.clone(),
+                kind: RowKind::Workspace {
+                    path: path.clone(),
+                    open,
+                    active,
+                },
+            });
+            if let Some(nodes) = self.trees.get(path).filter(|_| open) {
+                out.extend(self.ws_rows_of(nodes, active).into_iter().map(|mut r| {
+                    r.depth += 1;
+                    r
+                }));
+            }
+        }
+        out
+    }
+
+    /// Rows of the active workspace alone.
+    fn ws_rows(&self) -> Vec<Row> {
+        self.ws_rows_of(&self.nodes, true)
+    }
+
+    fn ws_rows_of(&self, nodes: &[Node], with_history: bool) -> Vec<Row> {
         let mut out = vec![];
         if !self.filter.is_empty() {
             let f = self.filter.to_lowercase();
@@ -522,7 +724,7 @@ impl App {
                     }
                 }
             }
-            walk(&self.nodes, &f, &mut out);
+            walk(nodes, &f, &mut out);
             return out;
         }
         fn walk(nodes: &[Node], depth: usize, collapsed: &HashSet<PathBuf>, out: &mut Vec<Row>) {
@@ -557,7 +759,10 @@ impl App {
                 }
             }
         }
-        walk(&self.nodes, 0, &self.collapsed, &mut out);
+        walk(nodes, 0, &self.collapsed, &mut out);
+        if !with_history {
+            return out;
+        }
         out.push(Row {
             depth: 0,
             name: "history".into(),
@@ -590,6 +795,7 @@ impl App {
         let rows = self.rows();
         match rows.get(self.cursor).map(|r| &r.kind) {
             Some(RowKind::Dir { path, .. }) => path.clone(),
+            Some(RowKind::Workspace { path, .. }) => path.join("requests"),
             Some(RowKind::Req { path, .. }) => path
                 .parent()
                 .map(Path::to_path_buf)
@@ -616,6 +822,19 @@ impl App {
         {
             self.err("Unsaved changes. Use :w to save or :discard to drop them");
             return;
+        }
+        let owner = self
+            .scope
+            .iter()
+            .filter(|(_, p)| path.starts_with(p))
+            .max_by_key(|(_, p)| p.as_os_str().len())
+            .map(|(_, p)| p.clone());
+        if let Some(o) = owner.filter(|o| !self.is_active(o)) {
+            self.activate_workspace(&o);
+            if !self.is_active(&o) {
+                return;
+            }
+            self.select_path(path);
         }
         let Some(ws) = &self.ws else { return };
         let text = std::fs::read_to_string(path)
@@ -777,14 +996,44 @@ impl App {
         self.resp_tab = RespTab::Body;
     }
 
+    fn apply_theme(&mut self, t: Theme) {
+        self.theme = t;
+        if let Some(r) = &mut self.resp {
+            r.lines = self.hl.lines(r.lang, &r.pretty, &self.theme);
+        }
+    }
+
+    /// Live-preview the highlighted `:theme` completion; restored on close.
+    fn preview_theme(&mut self) {
+        let name = (self.mode == Mode::Command && self.input.starts_with("theme "))
+            .then(|| {
+                let c = self.completions();
+                c.get(self.sel.min(c.len().saturating_sub(1)))
+                    .map(|c| c.label.clone())
+            })
+            .flatten();
+        let Some(name) = name else {
+            return self.restore_theme();
+        };
+        if let Ok(mut t) = Theme::load(&name) {
+            t.downgrade_if_needed();
+            let old = std::mem::replace(&mut self.theme, t.clone());
+            self.theme_backup.get_or_insert(old);
+            self.apply_theme(t);
+        }
+    }
+
+    fn restore_theme(&mut self) {
+        if let Some(t) = self.theme_backup.take() {
+            self.apply_theme(t);
+        }
+    }
+
     pub fn set_theme(&mut self, name: &str) {
         match Theme::load(name) {
             Ok(mut t) => {
                 t.downgrade_if_needed();
-                self.theme = t;
-                if let Some(r) = &mut self.resp {
-                    r.lines = self.hl.lines(r.lang, &r.pretty, &self.theme);
-                }
+                self.apply_theme(t);
                 self.info(format!("Theme: {name}"));
             }
             Err(e) => self.err(e.to_string()),
@@ -817,9 +1066,13 @@ impl App {
             self.status = None;
         }
         match self.mode {
-            Mode::Command | Mode::Search => self.popup_key(ke),
+            Mode::Command | Mode::Search => {
+                self.popup_key(ke);
+                self.preview_theme();
+            }
             Mode::Confirm => self.confirm_key(ke),
             Mode::Help => self.mode = Mode::Normal,
+            Mode::Picker => self.picker_key(ke),
             Mode::Vars => self.vars_key(ke),
             Mode::Edit => self.edit_key(ke),
             Mode::Normal => self.normal_key(ke),
@@ -868,6 +1121,11 @@ impl App {
         }
     }
 
+    #[cfg(test)]
+    pub fn action_for_test(&mut self, a: Action) {
+        self.act(a);
+    }
+
     fn act(&mut self, a: Action) {
         match a {
             Action::Up
@@ -913,6 +1171,9 @@ impl App {
             Action::Cancel => self.cancel(),
             Action::Quit => self.try_quit(false),
             Action::Help => self.mode = Mode::Help,
+            Action::Workspaces => self.open_picker(),
+            Action::CollapseAll => self.set_all_expanded(false),
+            Action::ExpandAll => self.set_all_expanded(true),
             Action::NewRequest => self.open_popup(Mode::Command, "new "),
             Action::DeleteRequest => self.ask_delete(),
             Action::CycleMethod => {
@@ -1024,6 +1285,9 @@ impl App {
                 }
                 Some(RowKind::HistDir { open: false }) => self.hist_open = true,
                 Some(RowKind::Req { .. }) => self.open_selected(),
+                Some(RowKind::Workspace {
+                    path, open: false, ..
+                }) => self.expand_workspace(&path, true),
                 _ => {}
             },
             Action::Left => match rows.get(self.cursor).map(|r| r.kind.clone()) {
@@ -1031,6 +1295,9 @@ impl App {
                     self.collapsed.insert(path);
                 }
                 Some(RowKind::HistDir { open: true }) => self.hist_open = false,
+                Some(RowKind::Workspace {
+                    path, open: true, ..
+                }) => self.expand_workspace(&path, false),
                 _ => {
                     // Jump to the parent row.
                     if let Some(d) = rows.get(self.cursor).map(|r| r.depth).filter(|d| *d > 0)
@@ -1060,6 +1327,16 @@ impl App {
                 }
             }
             Some(RowKind::HistDir { open }) => self.hist_open = !open,
+            Some(RowKind::Workspace { path, open, active }) => {
+                // Collapsed: expand and activate. Expanded but idle: activate. Active: collapse.
+                if open && active {
+                    self.expand_workspace(&path, false);
+                } else {
+                    self.expand_workspace(&path, true);
+                    self.activate_workspace(&path);
+                    self.cursor_to_workspace(&path);
+                }
+            }
             Some(RowKind::Hist(i)) => {
                 if let Some(h) = self.history.get(i) {
                     let s = format!(
@@ -1210,6 +1487,89 @@ impl App {
         }
     }
 
+    /// Popup listing the known workspaces (registry plus the current one).
+    pub fn open_picker(&mut self) {
+        let mut paths = registry::load();
+        if let Some(ws) = &self.ws
+            && !paths.iter().any(|p| same_dir(p, &ws.root))
+        {
+            paths.push(ws.root.clone());
+        }
+        let items: Vec<(String, PathBuf)> = paths
+            .into_iter()
+            .map(|p| {
+                let name = Workspace::open(&p)
+                    .map(|w| w.meta.name)
+                    .unwrap_or_else(|_| "?".into());
+                (name, p)
+            })
+            .collect();
+        if items.is_empty() {
+            return self.err("No workspaces yet (:wsnew <path> or turly init <path>)");
+        }
+        let sel = self
+            .ws
+            .as_ref()
+            .and_then(|w| items.iter().position(|(_, p)| same_dir(p, &w.root)))
+            .unwrap_or(0);
+        self.picker = Some(Picker {
+            items,
+            sel,
+            offset: 0,
+        });
+        self.mode = Mode::Picker;
+    }
+
+    fn picker_key(&mut self, ke: KeyEvent) {
+        let Some(p) = &mut self.picker else {
+            self.mode = Mode::Normal;
+            return;
+        };
+        let last = p.items.len().saturating_sub(1);
+        match ke.code {
+            KeyCode::Char('j') | KeyCode::Down => p.sel = (p.sel + 1).min(last),
+            KeyCode::Char('k') | KeyCode::Up => p.sel = p.sel.saturating_sub(1),
+            KeyCode::Char('g') | KeyCode::Home => p.sel = 0,
+            KeyCode::Char('G') | KeyCode::End => p.sel = last,
+            KeyCode::Enter => self.pick(None),
+            KeyCode::Esc | KeyCode::Char('q' | 'W') => {
+                self.picker = None;
+                self.mode = Mode::Normal;
+            }
+            _ => {}
+        }
+    }
+
+    fn picker_mouse(&mut self, me: MouseEvent) {
+        let (r, Some(p)) = (self.hit.picker, &mut self.picker) else {
+            return;
+        };
+        let pos = Position::new(me.column, me.row);
+        match me.kind {
+            MouseEventKind::ScrollUp => p.sel = p.sel.saturating_sub(1),
+            MouseEventKind::ScrollDown => p.sel = (p.sel + 1).min(p.items.len().saturating_sub(1)),
+            MouseEventKind::Down(MouseButton::Left) if r.contains(pos) => {
+                let i = p.offset + (pos.y - r.y) as usize;
+                if i < p.items.len() {
+                    self.pick(Some(i));
+                }
+            }
+            MouseEventKind::Down(_) if !r.contains(pos) => {
+                self.picker = None;
+                self.mode = Mode::Normal;
+            }
+            _ => {}
+        }
+    }
+
+    fn pick(&mut self, i: Option<usize>) {
+        let Some(p) = self.picker.take() else { return };
+        self.mode = Mode::Normal;
+        if let Some((_, path)) = p.items.get(i.unwrap_or(p.sel)) {
+            self.switch_workspace(path);
+        }
+    }
+
     fn confirm_key(&mut self, ke: KeyEvent) {
         self.mode = Mode::Normal;
         if ke.code != KeyCode::Char('y') {
@@ -1349,6 +1709,7 @@ impl App {
                     self.mode = Mode::Normal;
                 }
             }
+            Mode::Picker => self.picker_mouse(me),
             Mode::Normal | Mode::Edit => {
                 self.blink = Instant::now();
                 let p = Position::new(me.column, me.row);
@@ -1581,6 +1942,7 @@ impl App {
     }
 
     fn close_popup(&mut self) {
+        self.restore_theme();
         self.mode = self.return_to;
         self.input.clear();
     }
@@ -1612,6 +1974,11 @@ impl App {
                     }
                     self.mode = self.return_to;
                 } else {
+                    if self.enter_completes() {
+                        self.complete();
+                        self.preview_theme();
+                        return;
+                    }
                     let line = self.resolve_command_line();
                     self.close_popup();
                     self.run_command(&line);
@@ -1738,6 +2105,7 @@ impl App {
             Mode::Search => "SEARCH",
             Mode::Confirm => "CONFIRM",
             Mode::Help => "HELP",
+            Mode::Picker => "WORKSPACES",
             Mode::Vars => match self.vars.as_ref().map(|v| v.ed.mode) {
                 Some(EditorMode::Insert) => "VARS INSERT",
                 Some(EditorMode::Visual) => "VARS VISUAL",
@@ -1754,6 +2122,10 @@ impl App {
 }
 
 /// Copy via a platform clipboard tool, falling back to OSC 52.
+pub fn same_dir(a: &Path, b: &Path) -> bool {
+    a == b || matches!((a.canonicalize(), b.canonicalize()), (Ok(x), Ok(y)) if x == y)
+}
+
 pub fn copy_to_clipboard(text: &str) {
     use std::io::Write;
     use std::process::{Command, Stdio};

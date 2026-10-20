@@ -1,0 +1,14 @@
+name: deleteOrder
+method: DELETE
+url: '{{base_url}}/store/order/{{orderId}}'
+auth:
+  type: none
+body:
+  type: none
+  content: ''
+docs: |-
+  Delete purchase order by ID
+
+  For valid response try integer IDs with positive integer value. Negative or non-integer values will generate API errors
+order: 12
+follow_redirects: true

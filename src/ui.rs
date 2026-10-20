@@ -83,6 +83,7 @@ pub fn draw(f: &mut Frame, app: &mut App) {
         Mode::Command | Mode::Search => draw_popup(f, app, &th, area),
         Mode::Confirm => draw_confirm(f, app, &th, area),
         Mode::Help => draw_help(f, &th, area),
+        Mode::Picker => draw_picker(f, app, &th, area),
         _ => {}
     }
 }
@@ -192,6 +193,20 @@ fn draw_tree(f: &mut Frame, app: &mut App, th: &Theme, area: Rect) {
                     format!("{} {}", if *open { "▾" } else { "▸" }, r.name),
                     fg(th.dim),
                 ));
+            }
+            RowKind::Workspace { open, active, .. } => {
+                let st = if *active {
+                    fg(th.accent).add_modifier(Modifier::BOLD)
+                } else {
+                    fg(th.fg)
+                };
+                spans.push(Span::styled(
+                    format!("{} {}", if *open { "▾" } else { "▸" }, r.name),
+                    st,
+                ));
+                if *active {
+                    spans.push(Span::styled(" ●", fg(th.ok)));
+                }
             }
             RowKind::Req { path, method } => {
                 spans.push(Span::styled(
@@ -760,6 +775,7 @@ fn draw_bottom(f: &mut Frame, app: &mut App, th: &Theme, area: Rect) {
         .join(" ");
     let hints = match (app.mode, app.focus) {
         (Mode::Vars, _) => "Ctrl-s save · Esc close · i insert",
+        (Mode::Picker, _) => "j/k move · Enter open · click to open · Esc close",
         (Mode::Edit, _) => "Esc leave · Ctrl-r send · Ctrl-s save · : command",
         (_, Focus::Tree) => "Enter open+send · o new · dd delete · / filter · : command · ? help",
         (_, Focus::Request) => {
@@ -898,6 +914,67 @@ fn draw_confirm(f: &mut Frame, app: &App, th: &Theme, area: Rect) {
     );
 }
 
+fn draw_picker(f: &mut Frame, app: &mut App, th: &Theme, area: Rect) {
+    let cur = app.ws.as_ref().map(|w| w.root.clone());
+    let Some(p) = &mut app.picker else { return };
+    let h = (p.items.len() as u16 + 2)
+        .min(area.height.saturating_sub(4))
+        .max(3);
+    let rect = popup_rect(area, 76, h);
+    f.render_widget(Clear, rect);
+    let block = Block::bordered()
+        .border_style(fg(th.accent))
+        .title(Span::styled(
+            " Workspaces ",
+            fg(th.accent).add_modifier(Modifier::BOLD),
+        ))
+        .title_bottom(Span::styled(" Enter open · Esc close ", fg(th.dim)))
+        .style(Style::default().bg(th.bg).fg(th.fg));
+    let inner = block.inner(rect);
+    f.render_widget(block, rect);
+    let rows = inner.height as usize;
+    p.offset = p.offset.min(p.sel).max((p.sel + 1).saturating_sub(rows));
+    let width = inner.width as usize;
+    let lines: Vec<Line> = p
+        .items
+        .iter()
+        .enumerate()
+        .skip(p.offset)
+        .take(rows)
+        .map(|(i, (name, path))| {
+            let here = cur
+                .as_deref()
+                .is_some_and(|c| crate::app::same_dir(c, path));
+            let mark = if here { "● " } else { "  " };
+            let used = mark.chars().count() + name.chars().count() + 2;
+            let mut path = path.display().to_string();
+            let room = width.saturating_sub(used);
+            if path.chars().count() > room {
+                let keep = room.saturating_sub(1);
+                path = format!(
+                    "…{}",
+                    path.chars()
+                        .skip(path.chars().count() - keep)
+                        .collect::<String>()
+                );
+            }
+            let row = if i == p.sel {
+                Style::default().bg(th.selection)
+            } else {
+                Style::default()
+            };
+            Line::from(vec![
+                Span::styled(mark, fg(th.ok)),
+                Span::styled(name.clone(), fg(th.accent).add_modifier(Modifier::BOLD)),
+                Span::styled(format!("  {path}"), fg(th.dim)),
+            ])
+            .style(row)
+        })
+        .collect();
+    app.hit.picker = inner;
+    f.render_widget(Paragraph::new(lines), inner);
+}
+
 fn draw_vars(f: &mut Frame, app: &mut App, th: &Theme, area: Rect) {
     let blink = app.cursor_on();
     let Some(v) = &mut app.vars else { return };
@@ -966,6 +1043,8 @@ fn draw_help(f: &mut Frame, th: &Theme, area: Rect) {
         ("m  t", "cycle method / auth or body type"),
         ("e", "next environment"),
         ("y  Y", "copy request as curl / copy the response"),
+        ("W", "pick a workspace (also :ws with no argument)"),
+        ("l  h  zR  zM", "expand / collapse workspace rows / all"),
         (
             "Ctrl-w < > + -",
             "resize panes (= resets); drag borders too",
@@ -1064,6 +1143,60 @@ mod tests {
         );
         app.input = "qa".into();
         assert!(render(&mut app).contains("Quit out"));
+    }
+
+    #[test]
+    fn several_workspaces_expand_independently() {
+        let d = tempfile::tempdir().unwrap();
+        for n in ["a", "b"] {
+            let ws = Workspace::init(&d.path().join(n), n).unwrap();
+            let p = ws.new_request_path(&ws.requests_dir(), &format!("req-{n}"));
+            ws.save_request(&p, &Request::new(&format!("req-{n}")))
+                .unwrap();
+        }
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
+        let ws = Workspace::open(&d.path().join("a")).unwrap();
+        let mut app = App::new(Some(ws), Default::default(), rt.handle().clone(), tx);
+        app.set_scope(d.path());
+        let names = |app: &App| app.rows().into_iter().map(|r| r.name).collect::<Vec<_>>();
+        assert_eq!(names(&app), ["a", "req-a", "history", "b"]);
+        let b = app.scope[1].1.clone();
+        app.expand_workspace(&b, true);
+        assert_eq!(names(&app), ["a", "req-a", "history", "b", "req-b"]);
+        app.action_for_test(crate::keymap::Action::CollapseAll);
+        assert_eq!(names(&app), ["a", "b"]);
+        app.action_for_test(crate::keymap::Action::ExpandAll);
+        assert_eq!(names(&app), ["a", "req-a", "history", "b", "req-b"]);
+    }
+
+    #[test]
+    fn command_enter_completes_and_theme_previews() {
+        use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
+        let mut app = App::new(None, Default::default(), rt.handle().clone(), tx);
+        let key = |app: &mut App, c| app.on_key(KeyEvent::new(c, KeyModifiers::NONE));
+        app.open_popup(Mode::Command, "set");
+        key(&mut app, KeyCode::Enter);
+        assert_eq!(app.input, "set ");
+        assert_eq!(app.mode, Mode::Command);
+
+        let before = app.theme.bg;
+        app.open_popup(Mode::Command, "theme ");
+        let names = Theme::all_names();
+        let bg = |n: &String| {
+            let mut t = Theme::load(n).unwrap();
+            t.downgrade_if_needed();
+            t.bg
+        };
+        let other = names.iter().find(|n| bg(n) != before).unwrap();
+        app.input = format!("theme {other}");
+        key(&mut app, KeyCode::Char('x'));
+        key(&mut app, KeyCode::Backspace);
+        assert_ne!(app.theme.bg, before);
+        key(&mut app, KeyCode::Esc);
+        assert_eq!(app.theme.bg, before);
     }
 
     #[test]

@@ -99,29 +99,45 @@ async fn import_spec(spec: &str, dir: Option<PathBuf>, persist: bool) -> Result<
     Ok(dir)
 }
 
-/// Workspace to open: explicit path, else cwd if it is one, else the most recently registered.
-fn pick_workspace(path: Option<PathBuf>) -> Result<Option<Workspace>> {
-    if let Some(p) = path {
-        if !Workspace::is_workspace(&p) {
-            bail!(
-                "{} is not a Turly workspace (try `turly init {0}`)",
-                p.display()
-            );
-        }
-        return Ok(Some(Workspace::open(&p)?));
+/// Workspace to open, and the folder whose workspaces the tree lists.
+/// Explicit path, else the cwd: that folder itself if it is a workspace, else the most recently used
+/// (or first) workspace inside it; with no cwd match, the most recently registered one.
+fn pick_workspace(path: Option<PathBuf>) -> Result<(Option<Workspace>, Option<PathBuf>)> {
+    let explicit = path.is_some();
+    let Some(root) = path.or_else(|| std::env::current_dir().ok()) else {
+        return Ok((
+            registry::load()
+                .last()
+                .and_then(|p| Workspace::open(p).ok()),
+            None,
+        ));
+    };
+    let found = workspace::discover(&root);
+    // Most recently used workspace in the folder, else the first.
+    let pick = registry::load()
+        .iter()
+        .rev()
+        .find_map(|r| found.iter().find(|f| app::same_dir(f, r)))
+        .or(found.first());
+    if let Some(p) = pick {
+        return Ok((Some(Workspace::open(p)?), Some(root)));
     }
-    if let Ok(cwd) = std::env::current_dir()
-        && Workspace::is_workspace(&cwd)
-    {
-        return Ok(Some(Workspace::open(&cwd)?));
+    if explicit {
+        bail!(
+            "no Turly workspace in {} (try `turly init {0}`)",
+            root.display()
+        );
     }
-    Ok(registry::load()
-        .last()
-        .and_then(|p| Workspace::open(p).ok()))
+    Ok((
+        registry::load()
+            .last()
+            .and_then(|p| Workspace::open(p).ok()),
+        None,
+    ))
 }
 
 fn run_tui(rt: tokio::runtime::Runtime, path: Option<PathBuf>) -> Result<()> {
-    let ws = pick_workspace(path)?;
+    let (ws, scope) = pick_workspace(path)?;
     let (cfg, cfg_err) = match config::Config::load() {
         Ok(c) => (c, None),
         Err(e) => (Default::default(), Some(format!("{e:#}"))),
@@ -129,6 +145,9 @@ fn run_tui(rt: tokio::runtime::Runtime, path: Option<PathBuf>) -> Result<()> {
     let mouse = cfg.mouse.unwrap_or(true);
     let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<Msg>();
     let mut app = App::new(ws, cfg, rt.handle().clone(), tx);
+    if let Some(root) = scope {
+        app.set_scope(&root);
+    }
     if let Some(e) = cfg_err {
         app.err(e);
     }
