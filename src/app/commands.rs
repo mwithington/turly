@@ -240,6 +240,19 @@ impl App {
         }
     }
 
+    /// Enter on a bare command that needs an argument completes it instead of running.
+    pub fn enter_completes(&self) -> bool {
+        if self.input.contains(' ') {
+            return false;
+        }
+        let comps = self.completions();
+        let Some(c) = comps.get(self.sel.min(comps.len().saturating_sub(1))) else {
+            return false;
+        };
+        CMDS.iter()
+            .any(|m| m.name == c.insert.trim() && m.args.starts_with('<'))
+    }
+
     /// Typed line if its command is exact, else the selected completion.
     pub fn resolve_command_line(&mut self) -> String {
         let line = self.input.trim().to_string();
@@ -247,8 +260,9 @@ impl App {
         let comps = self.completions();
         if CMDS.iter().any(|c| c.name == first) {
             // Partial argument for a command with a candidate list: take the selection.
-            let partial =
-                line.contains(' ') && !comps.is_empty() && !comps.iter().any(|c| c.insert == line);
+            let partial = self.input.contains(' ')
+                && !comps.is_empty()
+                && !comps.iter().any(|c| c.insert == line);
             if !partial {
                 return line;
             }
@@ -324,7 +338,7 @@ impl App {
             "import" => self.cmd_import(arg),
             "theme" => {
                 if arg.is_empty() {
-                    self.err("usage: theme <name>  (Tab lists themes)");
+                    self.open_popup(Mode::Command, "theme ");
                 } else {
                     self.set_theme(arg);
                 }

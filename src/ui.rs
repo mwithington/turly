@@ -1171,6 +1171,33 @@ mod tests {
     }
 
     #[test]
+    fn command_enter_completes_and_theme_previews() {
+        use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
+        let mut app = App::new(None, Default::default(), rt.handle().clone(), tx);
+        let key = |app: &mut App, c| app.on_key(KeyEvent::new(c, KeyModifiers::NONE));
+        app.open_popup(Mode::Command, "set");
+        key(&mut app, KeyCode::Enter);
+        assert_eq!(app.input, "set ");
+        assert_eq!(app.mode, Mode::Command);
+
+        let before = app.theme.bg;
+        app.open_popup(Mode::Command, "theme ");
+        let names = Theme::all_names();
+        let other = names
+            .iter()
+            .find(|n| Theme::load(n).unwrap().bg != before)
+            .unwrap();
+        app.input = format!("theme {other}");
+        key(&mut app, KeyCode::Char('x'));
+        key(&mut app, KeyCode::Backspace);
+        assert_ne!(app.theme.bg, before);
+        key(&mut app, KeyCode::Esc);
+        assert_eq!(app.theme.bg, before);
+    }
+
+    #[test]
     fn renders_splash_without_workspace() {
         let rt = tokio::runtime::Runtime::new().unwrap();
         let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();

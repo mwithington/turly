@@ -365,6 +365,7 @@ pub struct App {
     pub drag: Option<Drag>,
     pub ws: Option<Workspace>,
     pub theme: Theme,
+    theme_backup: Option<Theme>,
     pub keys: KeyMap,
     pub hl: Highlighter,
     pub handler: EditorEventHandler,
@@ -424,6 +425,7 @@ impl App {
         let mut app = App {
             ws: None,
             theme,
+            theme_backup: None,
             keys,
             hl: Highlighter::new(),
             handler: EditorEventHandler::default(),
@@ -994,14 +996,44 @@ impl App {
         self.resp_tab = RespTab::Body;
     }
 
+    fn apply_theme(&mut self, t: Theme) {
+        self.theme = t;
+        if let Some(r) = &mut self.resp {
+            r.lines = self.hl.lines(r.lang, &r.pretty, &self.theme);
+        }
+    }
+
+    /// Live-preview the highlighted `:theme` completion; restored on close.
+    fn preview_theme(&mut self) {
+        let name = (self.mode == Mode::Command && self.input.starts_with("theme "))
+            .then(|| {
+                let c = self.completions();
+                c.get(self.sel.min(c.len().saturating_sub(1)))
+                    .map(|c| c.label.clone())
+            })
+            .flatten();
+        let Some(name) = name else {
+            return self.restore_theme();
+        };
+        if let Ok(mut t) = Theme::load(&name) {
+            t.downgrade_if_needed();
+            let old = std::mem::replace(&mut self.theme, t.clone());
+            self.theme_backup.get_or_insert(old);
+            self.apply_theme(t);
+        }
+    }
+
+    fn restore_theme(&mut self) {
+        if let Some(t) = self.theme_backup.take() {
+            self.apply_theme(t);
+        }
+    }
+
     pub fn set_theme(&mut self, name: &str) {
         match Theme::load(name) {
             Ok(mut t) => {
                 t.downgrade_if_needed();
-                self.theme = t;
-                if let Some(r) = &mut self.resp {
-                    r.lines = self.hl.lines(r.lang, &r.pretty, &self.theme);
-                }
+                self.apply_theme(t);
                 self.info(format!("Theme: {name}"));
             }
             Err(e) => self.err(e.to_string()),
@@ -1034,7 +1066,10 @@ impl App {
             self.status = None;
         }
         match self.mode {
-            Mode::Command | Mode::Search => self.popup_key(ke),
+            Mode::Command | Mode::Search => {
+                self.popup_key(ke);
+                self.preview_theme();
+            }
             Mode::Confirm => self.confirm_key(ke),
             Mode::Help => self.mode = Mode::Normal,
             Mode::Picker => self.picker_key(ke),
@@ -1907,6 +1942,7 @@ impl App {
     }
 
     fn close_popup(&mut self) {
+        self.restore_theme();
         self.mode = self.return_to;
         self.input.clear();
     }
@@ -1938,6 +1974,11 @@ impl App {
                     }
                     self.mode = self.return_to;
                 } else {
+                    if self.enter_completes() {
+                        self.complete();
+                        self.preview_theme();
+                        return;
+                    }
                     let line = self.resolve_command_line();
                     self.close_popup();
                     self.run_command(&line);
