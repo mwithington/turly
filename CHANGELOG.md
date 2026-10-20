@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.3.0](https://github.com/mwithington/turly/compare/v0.2.0...v0.3.0) (2026-10-20)
+
+
+### Features
+
+* Ctrl-w Ctrl-w cycles to the next pane ([cf7a5b1](https://github.com/mwithington/turly/commit/cf7a5b179fe093a58b8949e6aa5d70faab931810))
+* cut long values on the :vars page ([61f7a9d](https://github.com/mwithington/turly/commit/61f7a9d9189050818f00d5690f3434520b6bd815))
+* cut long values on the :vars page, widen the window on the cursor row ([c2814f1](https://github.com/mwithington/turly/commit/c2814f10453c25bc1ed108685f58a544014357c5))
+* expand several workspaces at once in the tree, collapse/expand all (z M / z R) ([1c8e869](https://github.com/mwithington/turly/commit/1c8e869bb9c668ec9d1825acca36de686343a704))
+* list the launch folder's workspaces as top-level tree rows ([347d54a](https://github.com/mwithington/turly/commit/347d54aac3265cd3f23fcbd7fb1db59c1ddbd65d))
+* live theme preview in :theme, Enter completes commands that need args ([ac10f5e](https://github.com/mwithington/turly/commit/ac10f5e1d1949e2b1f9e972be0e685eb729f9988))
+* resizable panes (drag borders, Ctrl-w &lt; &gt; + - =) and copy the response (Y, :copy) ([1021401](https://github.com/mwithington/turly/commit/1021401d4d39b85a5bfee5eec5c3a836f9e6f697))
+* resizable panes and copy the response ([e94704d](https://github.com/mwithington/turly/commit/e94704dd69abf117033936130b3fd8ad91529c69))
+* workspace default auth and OAuth2 ([3a7a377](https://github.com/mwithington/turly/commit/3a7a377342a61affe9f0581940c41c2b9230eb5f))
+* workspace default auth and OAuth2 (client credentials, password, browser sign-in) ([1148bda](https://github.com/mwithington/turly/commit/1148bda3f7d3321cfd57f811d7606a7e00bccb9a))
+* workspace picker (W, :ws with no argument) ([76547b8](https://github.com/mwithington/turly/commit/76547b85653b9e106482dfbf95a7dc60f644370a))
+* workspace picker, multi-workspace tree, theme preview, smarter command Enter ([12b9164](https://github.com/mwithington/turly/commit/12b91640a361b31b1ce98b1a9a1d3129761e4a7e))
+
 ## [0.2.0](https://github.com/mwithington/turly/compare/v0.1.0...v0.2.0) (2026-10-17)
 
 
