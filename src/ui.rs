@@ -1185,10 +1185,12 @@ mod tests {
         let before = app.theme.bg;
         app.open_popup(Mode::Command, "theme ");
         let names = Theme::all_names();
-        let other = names
-            .iter()
-            .find(|n| Theme::load(n).unwrap().bg != before)
-            .unwrap();
+        let bg = |n: &String| {
+            let mut t = Theme::load(n).unwrap();
+            t.downgrade_if_needed();
+            t.bg
+        };
+        let other = names.iter().find(|n| bg(n) != before).unwrap();
         app.input = format!("theme {other}");
         key(&mut app, KeyCode::Char('x'));
         key(&mut app, KeyCode::Backspace);
