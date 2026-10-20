@@ -2,7 +2,7 @@
 
 | Key | Action |
 | --- | --- |
-| `h` `j` `k` `l` | Move, collapse and expand folders, switch tabs (`l` on a workspace row switches to it) |
+| `h` `j` `k` `l` | Move, collapse and expand folders, switch tabs (on a workspace row, `l`/`h` expand/collapse it) |
 | `gg` / `G` | Top / bottom |
 | `Ctrl-d` / `Ctrl-u` | Half page down / up |
 | `Ctrl-w` + `h` `j` `k` `l` | Focus a pane (`Ctrl-h/j/k/l` also work) |
@@ -15,6 +15,7 @@
 | `Ctrl-s` | Save the request |
 | `:` | Command box |
 | `/`, `n`, `N` | Search the focused pane, next, previous |
+| `z M` / `z R` | Collapse / expand every workspace row |
 | `W` | Pick a workspace (`j`/`k` or click, `Enter` opens, `Esc` closes) |
 | `o` | New request |
 | `dd` | Delete a request (asks first) |

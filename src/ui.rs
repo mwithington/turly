@@ -194,8 +194,8 @@ fn draw_tree(f: &mut Frame, app: &mut App, th: &Theme, area: Rect) {
                     fg(th.dim),
                 ));
             }
-            RowKind::Workspace { open, .. } => {
-                let st = if *open {
+            RowKind::Workspace { open, active, .. } => {
+                let st = if *active {
                     fg(th.accent).add_modifier(Modifier::BOLD)
                 } else {
                     fg(th.fg)
@@ -204,6 +204,9 @@ fn draw_tree(f: &mut Frame, app: &mut App, th: &Theme, area: Rect) {
                     format!("{} {}", if *open { "▾" } else { "▸" }, r.name),
                     st,
                 ));
+                if *active {
+                    spans.push(Span::styled(" ●", fg(th.ok)));
+                }
             }
             RowKind::Req { path, method } => {
                 spans.push(Span::styled(
@@ -1041,6 +1044,7 @@ fn draw_help(f: &mut Frame, th: &Theme, area: Rect) {
         ("e", "next environment"),
         ("y  Y", "copy request as curl / copy the response"),
         ("W", "pick a workspace (also :ws with no argument)"),
+        ("l  h  zR  zM", "expand / collapse workspace rows / all"),
         (
             "Ctrl-w < > + -",
             "resize panes (= resets); drag borders too",
@@ -1139,6 +1143,31 @@ mod tests {
         );
         app.input = "qa".into();
         assert!(render(&mut app).contains("Quit out"));
+    }
+
+    #[test]
+    fn several_workspaces_expand_independently() {
+        let d = tempfile::tempdir().unwrap();
+        for n in ["a", "b"] {
+            let ws = Workspace::init(&d.path().join(n), n).unwrap();
+            let p = ws.new_request_path(&ws.requests_dir(), &format!("req-{n}"));
+            ws.save_request(&p, &Request::new(&format!("req-{n}")))
+                .unwrap();
+        }
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
+        let ws = Workspace::open(&d.path().join("a")).unwrap();
+        let mut app = App::new(Some(ws), Default::default(), rt.handle().clone(), tx);
+        app.set_scope(d.path());
+        let names = |app: &App| app.rows().into_iter().map(|r| r.name).collect::<Vec<_>>();
+        assert_eq!(names(&app), ["a", "req-a", "history", "b"]);
+        let b = app.scope[1].1.clone();
+        app.expand_workspace(&b, true);
+        assert_eq!(names(&app), ["a", "req-a", "history", "b", "req-b"]);
+        app.action_for_test(crate::keymap::Action::CollapseAll);
+        assert_eq!(names(&app), ["a", "b"]);
+        app.action_for_test(crate::keymap::Action::ExpandAll);
+        assert_eq!(names(&app), ["a", "req-a", "history", "b", "req-b"]);
     }
 
     #[test]
