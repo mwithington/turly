@@ -9,7 +9,7 @@ Press `:` and type. `Tab` completes, and the list shows what each command does.
 | `:new [name]`, `:mkdir <name>`, `:rm`, `:dup`, `:rename <name>`, `:discard` | Manage requests and folders |
 | `:copy` | Copy the response (body, or headers on that tab) |
 | `:send`, `:method <M>`, `:curl`, `:save <path>` | Send, set the method, copy as curl, save the response body |
-| `:ws <path\|name>`, `:wsnew <path>` | Switch to / create a workspace |
+| `:ws [path\|name]`, `:wsnew <path>` | Switch to a workspace (no argument opens the picker) / create one |
 | `:env [name]`, `:envnew <name>` | Switch to / create an environment |
 | `:set k=v`, `:secret k=v` | Set a variable / a secret in the active environment |
 | `:vars` | Edit the active environment line by line |

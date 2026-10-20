@@ -59,6 +59,7 @@ pub enum Action {
     PaneTaller,
     PaneShorter,
     PaneReset,
+    Workspaces,
 }
 
 const NAMES: &[(&str, Action)] = &[
@@ -100,6 +101,7 @@ const NAMES: &[(&str, Action)] = &[
     ("pane_taller", Action::PaneTaller),
     ("pane_shorter", Action::PaneShorter),
     ("pane_reset", Action::PaneReset),
+    ("workspaces", Action::Workspaces),
 ];
 
 impl Action {
@@ -159,6 +161,7 @@ const DEFAULTS: &[(&str, Action)] = &[
     ("e", Action::NextEnv),
     ("y", Action::CopyCurl),
     ("Y", Action::CopyResponse),
+    ("W", Action::Workspaces),
 ];
 
 pub fn parse_key(s: &str) -> Result<Key> {

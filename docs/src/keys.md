@@ -15,6 +15,7 @@
 | `Ctrl-s` | Save the request |
 | `:` | Command box |
 | `/`, `n`, `N` | Search the focused pane, next, previous |
+| `W` | Pick a workspace (`j`/`k` or click, `Enter` opens, `Esc` closes) |
 | `o` | New request |
 | `dd` | Delete a request (asks first) |
 | `m` / `t` | Cycle the method / the auth or body type |

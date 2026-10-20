@@ -31,4 +31,6 @@ Folders sort first, then requests by `order`, then by name.
 
 ## Several workspaces
 
-All registered workspaces are remembered in `~/.config/turly/workspaces.yaml`. Open one with `turly <path>` or switch inside the app with `:ws`.
+All registered workspaces are remembered in `~/.config/turly/workspaces.yaml`. Open one with `turly <path>`, or switch inside the app: press `W` (or run `:ws` with no argument) for a picker listing every known workspace, with a `●` on the current one. `:ws <name or path>` switches directly.
+
+Switching is refused while the open request has unsaved edits. The open request and response are cleared on a switch, and each workspace keeps its own active environment.

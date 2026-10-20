@@ -79,8 +79,8 @@ const CMDS: &[Cmd] = &[
     },
     Cmd {
         name: "ws",
-        args: "<path|name>",
-        desc: "Switch workspace",
+        args: "[path|name]",
+        desc: "Switch workspace (no argument opens the picker)",
     },
     Cmd {
         name: "wsnew",
@@ -404,13 +404,7 @@ impl App {
 
     fn cmd_ws(&mut self, arg: &str) {
         if arg.is_empty() {
-            return self.err("usage: ws <path|name>  (Tab lists workspaces)");
-        }
-        if self.open.as_mut().is_some_and(|o| {
-            o.sync();
-            o.dirty()
-        }) {
-            return self.err("Unsaved changes. Use :w to save or :discard to drop them");
+            return self.open_picker();
         }
         let direct = expand(arg);
         let found = if Workspace::is_workspace(&direct) {
@@ -421,14 +415,27 @@ impl App {
                     || Workspace::open(p).is_ok_and(|w| w.meta.name == arg)
             })
         };
-        match found.map(|p| Workspace::open(&p)) {
-            Some(Ok(ws)) => {
+        match found {
+            Some(p) => self.switch_workspace(&p),
+            None => self.err(format!("No workspace '{arg}'")),
+        }
+    }
+
+    /// Switch to the workspace at `path`, unless the open request has unsaved edits.
+    pub fn switch_workspace(&mut self, path: &Path) {
+        if self.open.as_mut().is_some_and(|o| {
+            o.sync();
+            o.dirty()
+        }) {
+            return self.err("Unsaved changes. Use :w to save or :discard to drop them");
+        }
+        match Workspace::open(path) {
+            Ok(ws) => {
                 let n = ws.meta.name.clone();
                 self.set_workspace(ws);
                 self.info(format!("Workspace: {n}"));
             }
-            Some(Err(e)) => self.err(e.to_string()),
-            None => self.err(format!("No workspace '{arg}'")),
+            Err(e) => self.err(e.to_string()),
         }
     }
 

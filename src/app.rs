@@ -41,6 +41,7 @@ pub enum Mode {
     Confirm,
     Help,
     Vars,
+    Picker,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -307,6 +308,7 @@ pub struct VarsEd {
 #[derive(Default)]
 pub struct Hit {
     pub main: Rect,
+    pub picker: Rect,
     pub right: Rect,
     pub side_edge: Rect,
     pub split_edge: Rect,
@@ -330,7 +332,14 @@ pub enum Drag {
     Split,
 }
 
+pub struct Picker {
+    pub items: Vec<(String, PathBuf)>,
+    pub sel: usize,
+    pub offset: usize,
+}
+
 pub struct App {
+    pub picker: Option<Picker>,
     /// Sidebar width in columns (None = automatic) and request pane height in percent.
     pub side_w: Option<u16>,
     pub split: u16,
@@ -433,6 +442,7 @@ impl App {
             status: None,
             quit: false,
             confirm: None,
+            picker: None,
             jar: Arc::new(reqwest::cookie::Jar::default()),
             tokens: Default::default(),
             rt,
@@ -820,6 +830,7 @@ impl App {
             Mode::Command | Mode::Search => self.popup_key(ke),
             Mode::Confirm => self.confirm_key(ke),
             Mode::Help => self.mode = Mode::Normal,
+            Mode::Picker => self.picker_key(ke),
             Mode::Vars => self.vars_key(ke),
             Mode::Edit => self.edit_key(ke),
             Mode::Normal => self.normal_key(ke),
@@ -913,6 +924,7 @@ impl App {
             Action::Cancel => self.cancel(),
             Action::Quit => self.try_quit(false),
             Action::Help => self.mode = Mode::Help,
+            Action::Workspaces => self.open_picker(),
             Action::NewRequest => self.open_popup(Mode::Command, "new "),
             Action::DeleteRequest => self.ask_delete(),
             Action::CycleMethod => {
@@ -1210,6 +1222,89 @@ impl App {
         }
     }
 
+    /// Popup listing the known workspaces (registry plus the current one).
+    pub fn open_picker(&mut self) {
+        let mut paths = registry::load();
+        if let Some(ws) = &self.ws
+            && !paths.iter().any(|p| same_dir(p, &ws.root))
+        {
+            paths.push(ws.root.clone());
+        }
+        let items: Vec<(String, PathBuf)> = paths
+            .into_iter()
+            .map(|p| {
+                let name = Workspace::open(&p)
+                    .map(|w| w.meta.name)
+                    .unwrap_or_else(|_| "?".into());
+                (name, p)
+            })
+            .collect();
+        if items.is_empty() {
+            return self.err("No workspaces yet (:wsnew <path> or turly init <path>)");
+        }
+        let sel = self
+            .ws
+            .as_ref()
+            .and_then(|w| items.iter().position(|(_, p)| same_dir(p, &w.root)))
+            .unwrap_or(0);
+        self.picker = Some(Picker {
+            items,
+            sel,
+            offset: 0,
+        });
+        self.mode = Mode::Picker;
+    }
+
+    fn picker_key(&mut self, ke: KeyEvent) {
+        let Some(p) = &mut self.picker else {
+            self.mode = Mode::Normal;
+            return;
+        };
+        let last = p.items.len().saturating_sub(1);
+        match ke.code {
+            KeyCode::Char('j') | KeyCode::Down => p.sel = (p.sel + 1).min(last),
+            KeyCode::Char('k') | KeyCode::Up => p.sel = p.sel.saturating_sub(1),
+            KeyCode::Char('g') | KeyCode::Home => p.sel = 0,
+            KeyCode::Char('G') | KeyCode::End => p.sel = last,
+            KeyCode::Enter => self.pick(None),
+            KeyCode::Esc | KeyCode::Char('q' | 'W') => {
+                self.picker = None;
+                self.mode = Mode::Normal;
+            }
+            _ => {}
+        }
+    }
+
+    fn picker_mouse(&mut self, me: MouseEvent) {
+        let (r, Some(p)) = (self.hit.picker, &mut self.picker) else {
+            return;
+        };
+        let pos = Position::new(me.column, me.row);
+        match me.kind {
+            MouseEventKind::ScrollUp => p.sel = p.sel.saturating_sub(1),
+            MouseEventKind::ScrollDown => p.sel = (p.sel + 1).min(p.items.len().saturating_sub(1)),
+            MouseEventKind::Down(MouseButton::Left) if r.contains(pos) => {
+                let i = p.offset + (pos.y - r.y) as usize;
+                if i < p.items.len() {
+                    self.pick(Some(i));
+                }
+            }
+            MouseEventKind::Down(_) if !r.contains(pos) => {
+                self.picker = None;
+                self.mode = Mode::Normal;
+            }
+            _ => {}
+        }
+    }
+
+    fn pick(&mut self, i: Option<usize>) {
+        let Some(p) = self.picker.take() else { return };
+        self.mode = Mode::Normal;
+        if let Some((_, path)) = p.items.get(i.unwrap_or(p.sel)) {
+            self.switch_workspace(path);
+        }
+    }
+
     fn confirm_key(&mut self, ke: KeyEvent) {
         self.mode = Mode::Normal;
         if ke.code != KeyCode::Char('y') {
@@ -1349,6 +1444,7 @@ impl App {
                     self.mode = Mode::Normal;
                 }
             }
+            Mode::Picker => self.picker_mouse(me),
             Mode::Normal | Mode::Edit => {
                 self.blink = Instant::now();
                 let p = Position::new(me.column, me.row);
@@ -1738,6 +1834,7 @@ impl App {
             Mode::Search => "SEARCH",
             Mode::Confirm => "CONFIRM",
             Mode::Help => "HELP",
+            Mode::Picker => "WORKSPACES",
             Mode::Vars => match self.vars.as_ref().map(|v| v.ed.mode) {
                 Some(EditorMode::Insert) => "VARS INSERT",
                 Some(EditorMode::Visual) => "VARS VISUAL",
@@ -1754,6 +1851,10 @@ impl App {
 }
 
 /// Copy via a platform clipboard tool, falling back to OSC 52.
+pub fn same_dir(a: &Path, b: &Path) -> bool {
+    a == b || matches!((a.canonicalize(), b.canonicalize()), (Ok(x), Ok(y)) if x == y)
+}
+
 pub fn copy_to_clipboard(text: &str) {
     use std::io::Write;
     use std::process::{Command, Stdio};
