@@ -1,0 +1,52 @@
+name: addPet
+method: POST
+url: '{{base_url}}/pet'
+auth:
+  type: none
+body:
+  type: json
+  content: |-
+    {
+      "category": {
+        "id": 0,
+        "name": "string"
+      },
+      "id": 0,
+      "name": "doggie",
+      "photoUrls": [
+        "string"
+      ],
+      "status": "available",
+      "tags": [
+        {
+          "id": 0,
+          "name": "string"
+        }
+      ]
+    }
+docs: |+
+  Add a new pet to the store
+
+example:
+  type: json
+  content: |-
+    {
+      "category": {
+        "id": 0,
+        "name": "string"
+      },
+      "id": 0,
+      "name": "doggie",
+      "photoUrls": [
+        "string"
+      ],
+      "status": "available",
+      "tags": [
+        {
+          "id": 0,
+          "name": "string"
+        }
+      ]
+    }
+order: 2
+follow_redirects: true

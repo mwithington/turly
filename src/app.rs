@@ -272,6 +272,7 @@ pub enum RowKind {
     Req { path: PathBuf, method: Method },
     HistDir { open: bool },
     Hist(usize),
+    Workspace { path: PathBuf, open: bool },
 }
 
 #[derive(Clone, Debug)]
@@ -339,6 +340,9 @@ pub struct Picker {
 }
 
 pub struct App {
+    /// Folder Turly was launched in, and the workspaces found in it.
+    pub scope_root: Option<PathBuf>,
+    pub scope: Vec<(String, PathBuf)>,
     pub picker: Option<Picker>,
     /// Sidebar width in columns (None = automatic) and request pane height in percent.
     pub side_w: Option<u16>,
@@ -443,6 +447,8 @@ impl App {
             quit: false,
             confirm: None,
             picker: None,
+            scope_root: None,
+            scope: vec![],
             jar: Arc::new(reqwest::cookie::Jar::default()),
             tokens: Default::default(),
             rt,
@@ -483,6 +489,26 @@ impl App {
 
     // ---- workspace / tree ----
 
+    /// Show the workspaces inside `root` as top-level tree rows (when there are several).
+    pub fn set_scope(&mut self, root: &Path) {
+        self.scope_root = root.canonicalize().ok();
+        self.rescan_scope();
+        self.reload_tree();
+    }
+
+    fn rescan_scope(&mut self) {
+        let Some(root) = &self.scope_root else { return };
+        self.scope = crate::workspace::discover(root)
+            .into_iter()
+            .map(|p| {
+                let name = Workspace::open(&p)
+                    .map(|w| w.meta.name)
+                    .unwrap_or_else(|_| "?".into());
+                (name, p)
+            })
+            .collect();
+    }
+
     pub fn set_workspace(&mut self, ws: Workspace) {
         let _ = registry::add(&ws.root);
         self.open = None;
@@ -492,6 +518,7 @@ impl App {
         self.filter.clear();
         self.cursor = 0;
         self.ws = Some(ws);
+        self.rescan_scope();
         self.refresh_vars();
         self.reload_tree();
     }
@@ -508,6 +535,38 @@ impl App {
     }
 
     pub fn rows(&self) -> Vec<Row> {
+        let inner = self.ws_rows();
+        let Some(ws) = &self.ws else { return inner };
+        let current = |p: &Path| same_dir(p, &ws.root);
+        if self.scope.len() < 2
+            || !self.filter.is_empty()
+            || !self.scope.iter().any(|(_, p)| current(p))
+        {
+            return inner;
+        }
+        let mut out = vec![];
+        for (name, path) in &self.scope {
+            let open = current(path);
+            out.push(Row {
+                depth: 0,
+                name: name.clone(),
+                kind: RowKind::Workspace {
+                    path: path.clone(),
+                    open,
+                },
+            });
+            if open {
+                out.extend(inner.iter().cloned().map(|mut r| {
+                    r.depth += 1;
+                    r
+                }));
+            }
+        }
+        out
+    }
+
+    /// Rows of the active workspace alone.
+    fn ws_rows(&self) -> Vec<Row> {
         let mut out = vec![];
         if !self.filter.is_empty() {
             let f = self.filter.to_lowercase();
@@ -1035,7 +1094,9 @@ impl App {
                     self.collapsed.remove(&path);
                 }
                 Some(RowKind::HistDir { open: false }) => self.hist_open = true,
-                Some(RowKind::Req { .. }) => self.open_selected(),
+                Some(RowKind::Req { .. } | RowKind::Workspace { open: false, .. }) => {
+                    self.open_selected()
+                }
                 _ => {}
             },
             Action::Left => match rows.get(self.cursor).map(|r| r.kind.clone()) {
@@ -1072,6 +1133,8 @@ impl App {
                 }
             }
             Some(RowKind::HistDir { open }) => self.hist_open = !open,
+            Some(RowKind::Workspace { path, open: false }) => self.switch_workspace(&path),
+            Some(RowKind::Workspace { .. }) => {}
             Some(RowKind::Hist(i)) => {
                 if let Some(h) = self.history.get(i) {
                     let s = format!(

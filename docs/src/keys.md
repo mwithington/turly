@@ -2,7 +2,7 @@
 
 | Key | Action |
 | --- | --- |
-| `h` `j` `k` `l` | Move, collapse and expand folders, switch tabs |
+| `h` `j` `k` `l` | Move, collapse and expand folders, switch tabs (`l` on a workspace row switches to it) |
 | `gg` / `G` | Top / bottom |
 | `Ctrl-d` / `Ctrl-u` | Half page down / up |
 | `Ctrl-w` + `h` `j` `k` `l` | Focus a pane (`Ctrl-h/j/k/l` also work) |

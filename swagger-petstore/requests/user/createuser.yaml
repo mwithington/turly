@@ -1,0 +1,37 @@
+name: createUser
+method: POST
+url: '{{base_url}}/user'
+auth:
+  type: none
+body:
+  type: json
+  content: |-
+    {
+      "email": "string",
+      "firstName": "string",
+      "id": 0,
+      "lastName": "string",
+      "password": "string",
+      "phone": "string",
+      "userStatus": 0,
+      "username": "string"
+    }
+docs: |-
+  Create user
+
+  This can only be done by the logged in user.
+example:
+  type: json
+  content: |-
+    {
+      "email": "string",
+      "firstName": "string",
+      "id": 0,
+      "lastName": "string",
+      "password": "string",
+      "phone": "string",
+      "userStatus": 0,
+      "username": "string"
+    }
+order: 13
+follow_redirects: true

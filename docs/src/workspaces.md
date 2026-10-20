@@ -33,4 +33,18 @@ Folders sort first, then requests by `order`, then by name.
 
 All registered workspaces are remembered in `~/.config/turly/workspaces.yaml`. Open one with `turly <path>`, or switch inside the app: press `W` (or run `:ws` with no argument) for a picker listing every known workspace, with a `●` on the current one. `:ws <name or path>` switches directly.
 
+## Several workspaces in one folder
+
+Launch Turly in a folder that holds workspaces, or point it at one (`turly ~/apis`). It finds every workspace in that folder and up to two levels below it, skipping hidden folders, `target` and `node_modules`. When there are two or more, they appear as the top-level rows of the sidebar, and only the active one is expanded:
+
+```text
+▸ alpha
+▾ gamma
+  GET  Ping
+  ▸ history
+▸ team-beta
+```
+
+`Enter`, `l` or a click on another workspace row switches to it. Which workspace opens first is the most recently used one in that folder, else the first. A folder with a single workspace shows the plain tree. `W` still lists every workspace Turly knows about, in any folder.
+
 Switching is refused while the open request has unsaved edits. The open request and response are cleared on a switch, and each workspace keeps its own active environment.

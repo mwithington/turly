@@ -433,6 +433,12 @@ impl App {
             Ok(ws) => {
                 let n = ws.meta.name.clone();
                 self.set_workspace(ws);
+                let at = self.rows().iter().position(
+                    |r| matches!(&r.kind, RowKind::Workspace { path: p, .. } if same_dir(p, path)),
+                );
+                if let Some(i) = at {
+                    self.cursor = i;
+                }
                 self.info(format!("Workspace: {n}"));
             }
             Err(e) => self.err(e.to_string()),

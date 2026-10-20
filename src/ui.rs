@@ -194,6 +194,17 @@ fn draw_tree(f: &mut Frame, app: &mut App, th: &Theme, area: Rect) {
                     fg(th.dim),
                 ));
             }
+            RowKind::Workspace { open, .. } => {
+                let st = if *open {
+                    fg(th.accent).add_modifier(Modifier::BOLD)
+                } else {
+                    fg(th.fg)
+                };
+                spans.push(Span::styled(
+                    format!("{} {}", if *open { "▾" } else { "▸" }, r.name),
+                    st,
+                ));
+            }
             RowKind::Req { path, method } => {
                 spans.push(Span::styled(
                     format!("{:<5}", method.short()),

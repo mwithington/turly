@@ -335,6 +335,38 @@ fn scan(dir: &Path) -> Result<Vec<Node>> {
     Ok(nodes.into_iter().map(|n| n.2).collect())
 }
 
+/// Workspaces at `root` or in its subfolders (2 levels deep); a found workspace is not searched further.
+pub fn discover(root: &Path) -> Vec<PathBuf> {
+    fn walk(dir: &Path, depth: u32, out: &mut Vec<PathBuf>) {
+        if Workspace::is_workspace(dir) {
+            out.push(dir.to_path_buf());
+            return;
+        }
+        if depth == 0 {
+            return;
+        }
+        let Ok(rd) = fs::read_dir(dir) else { return };
+        let mut subs: Vec<PathBuf> = rd
+            .flatten()
+            .map(|e| e.path())
+            .filter(|p| {
+                p.is_dir()
+                    && !p.file_name().is_some_and(|n| {
+                        let n = n.to_string_lossy();
+                        n.starts_with('.') || n == "target" || n == "node_modules"
+                    })
+            })
+            .collect();
+        subs.sort();
+        for s in subs {
+            walk(&s, depth - 1, out);
+        }
+    }
+    let mut out = vec![];
+    walk(root, 2, &mut out);
+    out
+}
+
 /// Global workspace registry at `<config>/turly/workspaces.yaml`.
 pub mod registry {
     use super::*;
@@ -403,6 +435,21 @@ mod tests {
         let mut own = req.clone();
         own.auth = Auth::None;
         assert_eq!(ws.effective(&own).auth, Auth::None);
+    }
+
+    #[test]
+    fn discovers_nested_workspaces() {
+        let d = tempfile::tempdir().unwrap();
+        let r = d.path();
+        for p in ["a", "b/c", "target/x", ".hidden/y", "d/e/f"] {
+            Workspace::init(&r.join(p), "w").unwrap();
+        }
+        let got: Vec<_> = discover(r)
+            .iter()
+            .map(|p| p.strip_prefix(r).unwrap().to_path_buf())
+            .collect();
+        assert_eq!(got, [PathBuf::from("a"), PathBuf::from("b/c")]);
+        assert_eq!(discover(&r.join("a")), [r.join("a")]);
     }
 
     #[test]
