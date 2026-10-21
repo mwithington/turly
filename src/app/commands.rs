@@ -459,14 +459,19 @@ impl App {
         }
     }
 
-    /// Where new workspaces go: beside the open one, else the base folder, else here.
+    /// Where new workspaces go: beside the open one, else the base folder, else the
+    /// current folder if it already holds workspaces, else the default data folder.
     fn new_ws_home(&self) -> PathBuf {
         let sibling = self.ws.as_ref().and_then(|w| w.root.parent());
         sibling
             .map(Path::to_path_buf)
             .or_else(|| self.base_dir.clone())
-            .or_else(|| std::env::current_dir().ok())
-            .unwrap_or_default()
+            .or_else(|| {
+                std::env::current_dir()
+                    .ok()
+                    .filter(|d| !crate::workspace::discover(d).is_empty())
+            })
+            .unwrap_or_else(crate::config::default_workspaces_dir)
     }
 
     fn cmd_base(&mut self, arg: &str) {

@@ -67,6 +67,6 @@ Keep every workspace in one folder and Turly finds them from anywhere:
 :base ~/api-workspaces
 ```
 
-The folder is saved as `base_dir` in `config.toml`. When you run `turly` somewhere with no workspace, it opens the base folder instead. New workspaces (`:wsnew name`) and imports (`:import spec`) are created next to the workspace you have open, which is inside the base folder when that is where you work. Pass a folder to `:import spec dir` to put one elsewhere.
+The folder is saved as `base_dir` in `config.toml`. When you run `turly` somewhere with no workspace, it opens the base folder instead. New workspaces (`:wsnew name`) and imports (`:import spec`) are created next to the workspace you have open, which is inside the base folder when that is where you work. With no base folder, no open workspace and no workspaces in the current folder, they go to `~/.local/share/turly/workspaces` (`$XDG_DATA_HOME/turly/workspaces`). Pass a folder to `:import spec dir` to put one elsewhere.
 
 Workspaces nested inside other workspaces, or one folder level down, show up in the tree too.
