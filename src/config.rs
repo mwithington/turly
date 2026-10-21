@@ -13,6 +13,16 @@ pub fn config_dir() -> PathBuf {
         .unwrap_or_else(|| PathBuf::from(".turly-config"))
 }
 
+/// Default home for new workspaces: `$XDG_DATA_HOME/turly/workspaces` or `~/.local/share/turly/workspaces`.
+pub fn default_workspaces_dir() -> PathBuf {
+    std::env::var_os("XDG_DATA_HOME")
+        .map(PathBuf::from)
+        .or_else(|| dirs::home_dir().map(|h| h.join(".local").join("share")))
+        .unwrap_or_else(|| PathBuf::from(".turly-data"))
+        .join("turly")
+        .join("workspaces")
+}
+
 /// Expand a leading `~/`.
 pub fn expand(p: &str) -> PathBuf {
     match (p.strip_prefix("~/"), dirs::home_dir()) {
