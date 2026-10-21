@@ -102,7 +102,10 @@ async fn import_spec(spec: &str, dir: Option<PathBuf>, persist: bool) -> Result<
 /// Workspace to open, and the folder whose workspaces the tree lists.
 /// Explicit path, else the cwd: that folder itself if it is a workspace, else the most recently used
 /// (or first) workspace inside it; with no cwd match, the most recently registered one.
-fn pick_workspace(path: Option<PathBuf>) -> Result<(Option<Workspace>, Option<PathBuf>)> {
+fn pick_workspace(
+    path: Option<PathBuf>,
+    base: Option<PathBuf>,
+) -> Result<(Option<Workspace>, Option<PathBuf>)> {
     let explicit = path.is_some();
     let Some(root) = path.or_else(|| std::env::current_dir().ok()) else {
         return Ok((
@@ -112,7 +115,16 @@ fn pick_workspace(path: Option<PathBuf>) -> Result<(Option<Workspace>, Option<Pa
             None,
         ));
     };
-    let found = workspace::discover(&root);
+    let mut root = root;
+    let mut found = workspace::discover(&root);
+    // Nothing here: fall back to the configured base folder.
+    if found.is_empty()
+        && !explicit
+        && let Some(b) = base.clone().filter(|b| b.is_dir())
+    {
+        found = workspace::discover(&b);
+        root = b;
+    }
     // Most recently used workspace in the folder, else the first.
     let pick = registry::load()
         .iter()
@@ -132,16 +144,16 @@ fn pick_workspace(path: Option<PathBuf>) -> Result<(Option<Workspace>, Option<Pa
         registry::load()
             .last()
             .and_then(|p| Workspace::open(p).ok()),
-        None,
+        base.filter(|b| b.is_dir()),
     ))
 }
 
 fn run_tui(rt: tokio::runtime::Runtime, path: Option<PathBuf>) -> Result<()> {
-    let (ws, scope) = pick_workspace(path)?;
     let (cfg, cfg_err) = match config::Config::load() {
         Ok(c) => (c, None),
         Err(e) => (Default::default(), Some(format!("{e:#}"))),
     };
+    let (ws, scope) = pick_workspace(path, cfg.base())?;
     let mouse = cfg.mouse.unwrap_or(true);
     let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<Msg>();
     let mut app = App::new(ws, cfg, rt.handle().clone(), tx);

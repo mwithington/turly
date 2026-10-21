@@ -9,14 +9,15 @@ Press `:` and type. `Tab` completes, and the list shows what each command does.
 | `:new [name]`, `:mkdir <name>`, `:rm`, `:dup`, `:rename <name>`, `:discard` | Manage requests and folders |
 | `:copy` | Copy the response (body, or headers on that tab) |
 | `:send`, `:method <M>`, `:curl`, `:save <path>` | Send, set the method, copy as curl, save the response body |
-| `:ws [path\|name]`, `:wsnew <path>` | Switch to a workspace (no argument opens the picker) / create one |
+| `:ws [path\|name]`, `:wsnew <path>` | Switch to a workspace (no argument opens the picker) / create one. A bare name is created beside the open workspace, else in the base folder |
 | `:env [name]`, `:envnew <name>` | Switch to / create an environment |
 | `:set k=v`, `:secret k=v` | Set a variable / a secret in the active environment |
 | `:vars` | Edit the active environment line by line |
 | `:authws [clear]` | Make this request's auth the workspace default |
 | `:logout` | Forget cached OAuth2 tokens |
 | `:example` | Reset the body to the spec's example |
-| `:import <spec> [dir]` | Build a workspace from an OpenAPI or Swagger spec |
+| `:import <spec> [dir]` | Build a workspace from an OpenAPI or Swagger spec. Without `dir` it lands beside the open workspace, else in the base folder, else the current folder if it holds workspaces, else `~/.local/share/turly/workspaces` |
+| `:base [folder]` | Set the folder that holds all your workspaces (saved to `config.toml`; no argument shows it) |
 | `:theme [name]` | Switch theme |
 | `:help` | Key reference |
 

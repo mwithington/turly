@@ -335,12 +335,12 @@ fn scan(dir: &Path) -> Result<Vec<Node>> {
     Ok(nodes.into_iter().map(|n| n.2).collect())
 }
 
-/// Workspaces at `root` or in its subfolders (2 levels deep); a found workspace is not searched further.
+/// Workspaces at `root` or in its subfolders (2 levels deep), including ones nested inside a workspace.
 pub fn discover(root: &Path) -> Vec<PathBuf> {
     fn walk(dir: &Path, depth: u32, out: &mut Vec<PathBuf>) {
-        if Workspace::is_workspace(dir) {
+        let is_ws = Workspace::is_workspace(dir);
+        if is_ws {
             out.push(dir.to_path_buf());
-            return;
         }
         if depth == 0 {
             return;
@@ -353,7 +353,10 @@ pub fn discover(root: &Path) -> Vec<PathBuf> {
                 p.is_dir()
                     && !p.file_name().is_some_and(|n| {
                         let n = n.to_string_lossy();
-                        n.starts_with('.') || n == "target" || n == "node_modules"
+                        n.starts_with('.')
+                            || n == "target"
+                            || n == "node_modules"
+                            || (is_ws && (n == "requests" || n == "environments"))
                     })
             })
             .collect();
@@ -450,6 +453,8 @@ mod tests {
             .collect();
         assert_eq!(got, [PathBuf::from("a"), PathBuf::from("b/c")]);
         assert_eq!(discover(&r.join("a")), [r.join("a")]);
+        Workspace::init(&r.join("a/inner"), "i").unwrap();
+        assert_eq!(discover(&r.join("a")), [r.join("a"), r.join("a/inner")]);
     }
 
     #[test]

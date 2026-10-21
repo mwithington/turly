@@ -1,6 +1,7 @@
 //! The `:` command line: table, completion and execution.
 
 use super::*;
+use crate::config::{Config, expand};
 use crate::model::{Auth, Env};
 use crate::openapi;
 use crate::workspace::slug;
@@ -88,6 +89,11 @@ const CMDS: &[Cmd] = &[
         desc: "Create a workspace",
     },
     Cmd {
+        name: "base",
+        args: "[folder]",
+        desc: "Set the folder that holds all your workspaces",
+    },
+    Cmd {
         name: "env",
         args: "[name]",
         desc: "Switch environment (no name cycles)",
@@ -163,13 +169,6 @@ pub struct Comp {
     pub label: String,
     pub desc: String,
     pub insert: String,
-}
-
-fn expand(p: &str) -> PathBuf {
-    match (p.strip_prefix("~/"), dirs::home_dir()) {
-        (Some(rest), Some(h)) => h.join(rest),
-        _ => PathBuf::from(p),
-    }
 }
 
 impl App {
@@ -320,6 +319,7 @@ impl App {
             },
             "ws" => self.cmd_ws(arg),
             "wsnew" => self.cmd_wsnew(arg),
+            "base" => self.cmd_base(arg),
             "env" => {
                 if arg.is_empty() {
                     self.act(Action::NextEnv);
@@ -459,11 +459,65 @@ impl App {
         }
     }
 
+    /// Where new workspaces go: beside the open one, else the base folder, else the
+    /// current folder if it already holds workspaces, else the default data folder.
+    fn new_ws_home(&self) -> PathBuf {
+        let sibling = self.ws.as_ref().and_then(|w| w.root.parent());
+        sibling
+            .map(Path::to_path_buf)
+            .or_else(|| self.base_dir.clone())
+            .or_else(|| {
+                std::env::current_dir()
+                    .ok()
+                    .filter(|d| !crate::workspace::discover(d).is_empty())
+            })
+            .unwrap_or_else(crate::config::default_workspaces_dir)
+    }
+
+    fn cmd_base(&mut self, arg: &str) {
+        if arg.is_empty() {
+            return match &self.base_dir {
+                Some(b) => self.info(format!("Base folder: {}", b.display())),
+                None => self.err("usage: base <folder>"),
+            };
+        }
+        let mut dir = expand(arg);
+        if dir.is_relative() {
+            dir = std::env::current_dir().unwrap_or_default().join(dir);
+        }
+        let r = std::fs::create_dir_all(&dir).map_err(anyhow::Error::from);
+        if let Err(e) = r.and_then(|()| Config::save_base_dir(&dir)) {
+            return self.err(format!("{e:#}"));
+        }
+        self.base_dir = Some(dir.clone());
+        self.set_scope(&dir);
+        let open_one = self.scope.first().map(|(_, p)| p.clone());
+        let inside = self.scope.iter().any(|(_, p)| self.is_active(p));
+        match open_one {
+            Some(p) if !inside => match Workspace::open(&p) {
+                Ok(ws) => self.set_workspace(ws),
+                Err(e) => return self.err(format!("{e:#}")),
+            },
+            None if self.ws.is_none() => {
+                return self.info(format!(
+                    "Base folder {} has no workspaces yet: :wsnew <name> or :import <spec>",
+                    dir.display()
+                ));
+            }
+            _ => {}
+        }
+        self.info(format!("Base folder: {}", dir.display()));
+    }
+
     fn cmd_wsnew(&mut self, arg: &str) {
         if arg.is_empty() {
             return self.err("usage: wsnew <path>");
         }
-        let dir = expand(arg);
+        let dir = if arg.contains(['/', '\\']) || arg.starts_with(['~', '.']) {
+            expand(arg)
+        } else {
+            self.new_ws_home().join(arg)
+        };
         let name = dir
             .file_name()
             .map(|n| n.to_string_lossy().into_owned())
@@ -552,16 +606,16 @@ impl App {
             return self.err("usage: import <spec path|url> [dir]");
         };
         let dir = it.next().map(expand);
+        let home = self.new_ws_home();
         let tx = self.tx.clone();
         self.info(format!("Importing {src}..."));
         self.rt.spawn(async move {
             let r = async {
                 let imp = openapi::import(&openapi::fetch(&src).await?)?;
-                let dir = dir.unwrap_or_else(|| PathBuf::from(slug(&imp.title)));
-                let dir = if dir.is_absolute() {
-                    dir
-                } else {
-                    std::env::current_dir()?.join(dir)
+                let dir = match dir {
+                    Some(d) if d.is_absolute() => d,
+                    Some(d) => std::env::current_dir()?.join(d),
+                    None => home.join(slug(&imp.title)),
                 };
                 openapi::build_workspace(&dir, &imp)?;
                 anyhow::Ok(dir)
