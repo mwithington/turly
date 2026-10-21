@@ -5,6 +5,7 @@
 ```toml
 theme = "nord"
 mouse = true   # false keeps native terminal text selection
+base_dir = "~/api-workspaces"   # folder holding all your workspaces (set with :base)
 
 # Remap or add keys. Chords are space separated.
 [keys]
