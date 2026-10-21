@@ -354,6 +354,7 @@ pub struct Picker {
 pub struct App {
     /// Folder Turly was launched in, and the workspaces found in it.
     pub scope_root: Option<PathBuf>,
+    pub base_dir: Option<PathBuf>,
     pub scope: Vec<(String, PathBuf)>,
     /// Expanded workspace rows (scope paths) and their loaded trees.
     pub expanded: HashSet<PathBuf>,
@@ -465,6 +466,7 @@ impl App {
             confirm: None,
             picker: None,
             scope_root: None,
+            base_dir: cfg.base(),
             scope: vec![],
             expanded: HashSet::new(),
             trees: BTreeMap::new(),
@@ -537,6 +539,14 @@ impl App {
         self.collapsed.clear();
         self.filter.clear();
         self.cursor = 0;
+        // A workspace outside the scope widens it to the folder it sits in.
+        if let (Some(root), Ok(c), Some(parent)) =
+            (&self.scope_root, ws.root.canonicalize(), ws.root.parent())
+            && !c.starts_with(root)
+            && dirs::home_dir().is_none_or(|h| h != parent)
+        {
+            self.scope_root = parent.canonicalize().ok();
+        }
         self.ws = Some(ws);
         self.rescan_scope();
         self.reset_expanded();

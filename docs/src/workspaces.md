@@ -58,3 +58,15 @@ The `●` marks the active workspace: the one whose environment, variables and h
 Activating a workspace closes the open request, so it is refused while that request has unsaved edits. Which workspace is active at startup is the most recently used one in the folder, else the first. `W` still lists every workspace Turly knows about, in any folder.
 
 Switching is refused while the open request has unsaved edits. The open request and response are cleared on a switch, and each workspace keeps its own active environment.
+
+## A base folder
+
+Keep every workspace in one folder and Turly finds them from anywhere:
+
+```
+:base ~/api-workspaces
+```
+
+The folder is saved as `base_dir` in `config.toml`. When you run `turly` somewhere with no workspace, it opens the base folder instead. New workspaces (`:wsnew name`) and imports (`:import spec`) are created next to the workspace you have open, which is inside the base folder when that is where you work. Pass a folder to `:import spec dir` to put one elsewhere.
+
+Workspaces nested inside other workspaces, or one folder level down, show up in the tree too.

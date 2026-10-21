@@ -139,6 +139,7 @@ fn draw_splash(f: &mut Frame, th: &Theme, area: Rect) {
     for l in [
         ":wsnew <path>   create a workspace",
         ":import <spec>   build one from an OpenAPI spec",
+        ":base <folder>   keep all workspaces in one folder",
         ":help           key bindings",
         ":q              quit",
     ] {
@@ -818,6 +819,12 @@ fn popup_rect(area: Rect, w: u16, h: u16) -> Rect {
     }
 }
 
+/// Last `n` chars of `s`, so the typing end stays visible.
+fn tail(s: &str, n: usize) -> String {
+    let skip = s.chars().count().saturating_sub(n);
+    s.chars().skip(skip).collect()
+}
+
 fn draw_popup(f: &mut Frame, app: &mut App, th: &Theme, area: Rect) {
     let searching = app.mode == Mode::Search;
     let comps = if searching { vec![] } else { app.completions() };
@@ -847,7 +854,7 @@ fn draw_popup(f: &mut Frame, app: &mut App, th: &Theme, area: Rect) {
     let prompt = if searching { "/" } else { ":" };
     let mut lines = vec![Line::from(vec![
         Span::styled(prompt, fg(th.accent)),
-        Span::raw(app.input.clone()),
+        Span::raw(tail(&app.input, inner.width.saturating_sub(2) as usize)),
         Span::styled("█", fg(th.accent)),
     ])];
     if searching {
