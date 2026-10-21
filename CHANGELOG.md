@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.4.0](https://github.com/mwithington/turly/compare/v0.3.0...v0.4.0) (2026-10-21)
+
+
+### Features
+
+* base folder for workspaces, sibling imports, nested discovery ([f52c132](https://github.com/mwithington/turly/commit/f52c132eae464e889c52d0aa68a06f322fc98675))
+* base folder for workspaces, sibling imports, nested workspace discovery; scroll long command input ([44cfea1](https://github.com/mwithington/turly/commit/44cfea184ac69a18757053f1e502d590e876de6b))
+* default new workspaces to $XDG_DATA_HOME/turly/workspaces ([6143882](https://github.com/mwithington/turly/commit/6143882d803a4c379f7f24bc124a71cd9284bfa5))
+
 ## [0.3.0](https://github.com/mwithington/turly/compare/v0.2.0...v0.3.0) (2026-10-20)
 
 
