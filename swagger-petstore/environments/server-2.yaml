@@ -1,7 +1,0 @@
-vars:
-  base_url: http://petstore.swagger.io/v2
-  orderId: '0'
-  petId: '0'
-  username: string
-secrets:
-- api_key
