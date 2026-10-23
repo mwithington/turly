@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.5.0](https://github.com/mwithington/turly/compare/v0.4.0...v0.5.0) (2026-10-23)
+
+
+### Features
+
+* recent workspaces and requests on the empty screens ([21d1b94](https://github.com/mwithington/turly/commit/21d1b9431928f624d666bf6a3f4b425a1feda7e3))
+* recent workspaces on the start screen, recent requests in the empty request pane ([8283198](https://github.com/mwithington/turly/commit/8283198920bd1a9df58ff651216c32c0ee842887))
+
 ## [0.4.0](https://github.com/mwithington/turly/compare/v0.3.0...v0.4.0) (2026-10-21)
 
 
