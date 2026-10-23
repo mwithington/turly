@@ -101,7 +101,7 @@ async fn import_spec(spec: &str, dir: Option<PathBuf>, persist: bool) -> Result<
 
 /// Workspace to open, and the folder whose workspaces the tree lists.
 /// Explicit path, else the cwd: that folder itself if it is a workspace, else the most recently used
-/// (or first) workspace inside it; with no cwd match, the most recently registered one.
+/// (or first) workspace inside it; with no cwd match, none (the start screen lists recent workspaces).
 fn pick_workspace(
     path: Option<PathBuf>,
     base: Option<PathBuf>,
@@ -140,12 +140,7 @@ fn pick_workspace(
             root.display()
         );
     }
-    Ok((
-        registry::load()
-            .last()
-            .and_then(|p| Workspace::open(p).ok()),
-        base.filter(|b| b.is_dir()),
-    ))
+    Ok((None, base.filter(|b| b.is_dir())))
 }
 
 fn run_tui(rt: tokio::runtime::Runtime, path: Option<PathBuf>) -> Result<()> {

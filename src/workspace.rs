@@ -389,11 +389,9 @@ pub mod registry {
     pub fn add(root: &Path) -> Result<()> {
         let root = root.canonicalize()?;
         let mut all = load();
-        if !all.contains(&root) {
-            all.push(root);
-            write_yaml(&path(), &all)?;
-        }
-        Ok(())
+        all.retain(|p| *p != root);
+        all.push(root);
+        write_yaml(&path(), &all)
     }
 }
 
