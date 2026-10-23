@@ -58,7 +58,7 @@ turly init my-api
 turly my-api
 ```
 
-`turly` with no arguments opens the workspace in the current directory, or the most recently used one. Inside the app, `:wsnew <path>` and `:import <spec>` do the same as the commands above.
+`turly` with no arguments opens the workspace in the current directory. Anywhere else it shows a start screen listing your recent workspaces (`j`/`k`, `Enter` or a click to open one). With no request open, the request pane lists the requests you sent recently. Inside the app, `:wsnew <path>` and `:import <spec>` do the same as the commands above.
 
 Imported requests point at `{{base_url}}`. Set it for your environment with `:set base_url=https://api.example.com`, and secrets with `:secret token=...`.
 

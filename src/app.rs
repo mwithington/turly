@@ -332,6 +332,7 @@ pub struct Hit {
     pub content: Rect,
     pub resp: Rect,
     pub resp_tabs: Vec<(Rect, RespTab)>,
+    pub recent: Vec<Rect>,
 }
 
 pub struct Status {
@@ -393,6 +394,9 @@ pub struct App {
     pub resp_scroll: usize,
     pub resp_height: usize,
     pub sending: bool,
+    /// Request (path, name) behind the in-flight send, for history.
+    sent: Option<(PathBuf, String)>,
+    pub recent_sel: usize,
     pub error: Option<String>,
     pub input: String,
     pub sel: usize,
@@ -456,6 +460,8 @@ impl App {
             resp_scroll: 0,
             resp_height: 10,
             sending: false,
+            sent: None,
+            recent_sel: 0,
             error: None,
             input: String::new(),
             sel: 0,
@@ -899,6 +905,7 @@ impl App {
             return;
         };
         open.sync();
+        self.sent = open.path.clone().map(|p| (p, open.req.name.clone()));
         let vars = ws.resolved_vars(env.as_deref());
         let req = ws.effective(&open.req);
         match http::prepare(&req, &vars) {
@@ -964,6 +971,12 @@ impl App {
                         self.resp = None;
                         self.error = Some(e);
                     }
+                }
+                if let (Some((path, name)), Some(ws)) = (self.sent.take(), &self.ws) {
+                    if let Ok(rel) = path.strip_prefix(&ws.root) {
+                        entry["path"] = rel.display().to_string().into();
+                    }
+                    entry["name"] = name.into();
                 }
                 if let Some(ws) = &self.ws {
                     ws.push_history(&entry);
@@ -1245,7 +1258,81 @@ impl App {
         }
     }
 
+    /// The empty-state "recent" list owns j/k/Enter (splash, or the empty request pane).
+    fn recent_active(&self) -> bool {
+        self.ws.is_none() || (self.open.is_none() && self.focus == Focus::Request)
+    }
+
+    /// Recently sent requests: (label, absolute path), newest first, one per request.
+    pub fn recent_requests(&self) -> Vec<(String, PathBuf)> {
+        let Some(ws) = &self.ws else { return vec![] };
+        let mut seen = HashSet::new();
+        self.history
+            .iter()
+            .filter_map(|h| {
+                let rel = h["path"].as_str()?;
+                let path = ws.root.join(rel);
+                (path.exists() && seen.insert(path.clone())).then(|| {
+                    let label = format!(
+                        "{} {}  {}",
+                        h["method"].as_str().unwrap_or(""),
+                        h["status"].as_str().unwrap_or("ERR"),
+                        h["name"].as_str().unwrap_or(rel)
+                    );
+                    (label, path)
+                })
+            })
+            .take(8)
+            .collect()
+    }
+
+    /// Recently used workspaces: (name, path), newest first.
+    pub fn recent_workspaces(&self) -> Vec<(String, PathBuf)> {
+        registry::load()
+            .into_iter()
+            .rev()
+            .take(8)
+            .map(|p| {
+                let n = Workspace::open(&p).map(|w| w.meta.name).unwrap_or_default();
+                (n, p)
+            })
+            .collect()
+    }
+
+    fn recent_len(&self) -> usize {
+        if self.ws.is_none() {
+            self.recent_workspaces().len()
+        } else {
+            self.recent_requests().len()
+        }
+    }
+
+    fn open_recent(&mut self, i: usize) {
+        if self.ws.is_none() {
+            if let Some((_, p)) = self.recent_workspaces().get(i).cloned() {
+                self.switch_workspace(&p);
+            }
+        } else if let Some((_, p)) = self.recent_requests().get(i).cloned() {
+            self.load_request(&p);
+        }
+    }
+
+    fn recent_motion(&mut self, a: Action) {
+        let max = self.recent_len().saturating_sub(1);
+        self.recent_sel = match a {
+            Action::Down | Action::HalfDown => self.recent_sel + 1,
+            Action::Up | Action::HalfUp => self.recent_sel.saturating_sub(1),
+            Action::Top => 0,
+            Action::Bottom => max,
+            _ => self.recent_sel,
+        }
+        .min(max);
+    }
+
     fn motion(&mut self, a: Action) {
+        if self.recent_active() {
+            return self.recent_motion(a);
+        }
         let half = (self.resp_height / 2).max(1);
         match self.focus {
             Focus::Tree => self.tree_motion(a),
@@ -1322,6 +1409,9 @@ impl App {
     }
 
     fn open_selected(&mut self) {
+        if self.recent_active() {
+            return self.open_recent(self.recent_sel);
+        }
         match self.focus {
             Focus::Request => return self.do_send(),
             Focus::Response => return,
@@ -1762,6 +1852,10 @@ impl App {
     }
 
     fn click(&mut self, p: Position, me: MouseEvent) {
+        if let Some(i) = self.hit.recent.iter().position(|r| r.contains(p)) {
+            self.recent_sel = i;
+            return self.open_recent(i);
+        }
         let h = &self.hit;
         let tab = h.tabs.iter().find(|(r, _)| r.contains(p)).map(|(_, t)| *t);
         let resp_tab = h

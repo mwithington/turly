@@ -52,7 +52,7 @@ pub fn draw(f: &mut Frame, app: &mut App) {
     .areas(area);
     draw_top(f, app, &th, top);
     if app.ws.is_none() {
-        draw_splash(f, &th, main);
+        draw_splash(f, app, &th, main);
     } else {
         let auto = (main.width / 4).clamp(24, 44);
         let w = app
@@ -121,7 +121,7 @@ fn draw_top(f: &mut Frame, app: &App, th: &Theme, area: Rect) {
     );
 }
 
-fn draw_splash(f: &mut Frame, th: &Theme, area: Rect) {
+fn draw_splash(f: &mut Frame, app: &mut App, th: &Theme, area: Rect) {
     let mut lines: Vec<Line> = LOGO
         .lines()
         .map(|l| Line::from(Span::styled(l, fg(th.accent))))
@@ -145,13 +145,74 @@ fn draw_splash(f: &mut Frame, th: &Theme, area: Rect) {
     ] {
         lines.push(Line::from(Span::styled(l, fg(th.fg))));
     }
-    let h = lines.len() as u16;
-    let r = Rect {
-        y: area.y + area.height.saturating_sub(h) / 2,
-        height: h.min(area.height),
+    let items: Vec<String> = app
+        .recent_workspaces()
+        .into_iter()
+        .map(|(n, p)| format!("{n}  {}", p.display()))
+        .collect();
+    draw_with_recent(f, app, th, area, lines, "Recent workspaces", &items, true);
+}
+
+fn cut(s: &str, n: usize) -> String {
+    if s.chars().count() <= n {
+        return s.to_string();
+    }
+    s.chars().take(n.saturating_sub(1)).chain(['…']).collect()
+}
+
+/// Centered `head` lines with a selectable "recent" list under them; registers click rects.
+#[allow(clippy::too_many_arguments)]
+fn draw_with_recent(
+    f: &mut Frame,
+    app: &mut App,
+    th: &Theme,
+    area: Rect,
+    head: Vec<Line<'static>>,
+    title: &str,
+    items: &[String],
+    active: bool,
+) {
+    let hh = head.len() as u16;
+    let n = items.len().min(area.height.saturating_sub(hh + 3) as usize);
+    let total = hh + if n > 0 { 2 + n as u16 } else { 0 };
+    let y0 = area.y + area.height.saturating_sub(total) / 2;
+    let head_r = Rect {
+        y: y0,
+        height: hh.min(area.height),
         ..area
     };
-    f.render_widget(Paragraph::new(lines).alignment(Alignment::Center), r);
+    f.render_widget(Paragraph::new(head).alignment(Alignment::Center), head_r);
+    if n == 0 {
+        return;
+    }
+    app.recent_sel = app.recent_sel.min(n - 1);
+    let w = (items
+        .iter()
+        .take(n)
+        .map(|s| s.chars().count())
+        .max()
+        .unwrap_or(0)
+        + 2)
+    .max(title.len())
+    .min(area.width as usize) as u16;
+    let x = area.x + (area.width - w) / 2;
+    let ty = y0 + hh + 1;
+    f.render_widget(
+        Paragraph::new(Span::styled(title, fg(th.dim))),
+        Rect::new(x, ty, w, 1),
+    );
+    for (i, it) in items.iter().take(n).enumerate() {
+        let sel = active && i == app.recent_sel;
+        let r = Rect::new(x, ty + 1 + i as u16, w, 1);
+        let text = cut(&format!("{} {it}", if sel { "▸" } else { " " }), w as usize);
+        let st = if sel {
+            fg(th.accent).bg(th.selection).add_modifier(Modifier::BOLD)
+        } else {
+            fg(th.fg)
+        };
+        f.render_widget(Paragraph::new(Span::styled(text, st)), r);
+        app.hit.recent.push(r);
+    }
 }
 
 fn pane<'a>(th: &Theme, title: String, focused: bool) -> Block<'a> {
@@ -440,20 +501,24 @@ fn draw_request(f: &mut Frame, app: &mut App, th: &Theme, area: Rect) {
         let block = pane(th, " Request ".into(), focused);
         let inner = block.inner(area);
         f.render_widget(block, area);
-        let msg = Paragraph::new(vec![
+        let head = vec![
             Line::from(Span::styled("No request open", fg(th.dim))),
             Line::from(Span::styled(
                 "Select one in the sidebar, or press o to create one",
                 fg(th.dim),
             )),
-        ])
-        .alignment(Alignment::Center);
-        let r = Rect {
-            y: inner.y + inner.height / 2 - inner.height.min(2) / 2,
-            height: 2.min(inner.height),
-            ..inner
-        };
-        f.render_widget(msg, r);
+        ];
+        let items: Vec<String> = app.recent_requests().into_iter().map(|r| r.0).collect();
+        draw_with_recent(
+            f,
+            app,
+            th,
+            inner,
+            head,
+            "Recent requests (Ctrl-w l, then j/k, Enter)",
+            &items,
+            focused,
+        );
         return;
     };
     let title = format!(
@@ -1204,6 +1269,26 @@ mod tests {
         assert_ne!(app.theme.bg, before);
         key(&mut app, KeyCode::Esc);
         assert_eq!(app.theme.bg, before);
+    }
+
+    #[test]
+    fn empty_request_pane_lists_recent_requests() {
+        let (mut app, d, _rt) = app_with_request();
+        let ws = Workspace::open(d.path()).unwrap();
+        let p = ws.new_request_path(&ws.requests_dir(), "ghost");
+        let rel = p.strip_prefix(d.path()).unwrap().display().to_string();
+        ws.push_history(
+            &serde_json::json!({"method":"GET","status":"200","url":"u","name":"ghost","path":rel}),
+        );
+        let rel = "requests/list-pets.yaml";
+        ws.push_history(&serde_json::json!({"method":"GET","status":"200","url":"u","name":"List pets","path":rel}));
+        app.set_workspace(ws);
+        let s = render(&mut app);
+        assert!(
+            s.contains("Recent requests") && s.contains("200  List pets"),
+            "{s}"
+        );
+        assert!(!s.contains("ghost"), "missing files are skipped");
     }
 
     #[test]
