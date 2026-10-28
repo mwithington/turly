@@ -109,6 +109,11 @@ pub fn text_of(ed: &EditorState) -> String {
     String::from(ed.lines.clone())
 }
 
+/// Terminals send pasted newlines as `\r`; the editor splits lines on `\n`.
+fn norm_newlines(s: &str) -> String {
+    s.replace("\r\n", "\n").replace('\r', "\n")
+}
+
 fn editor(s: &str) -> EditorState {
     EditorState::new(Lines::from(s))
 }
@@ -1109,6 +1114,7 @@ impl App {
     }
 
     pub fn on_paste(&mut self, s: &str) {
+        let s = &norm_newlines(s);
         match self.mode {
             Mode::Command | Mode::Search => {
                 self.input.push_str(s.lines().next().unwrap_or(""));
@@ -2302,5 +2308,13 @@ impl App {
             self.after_edit();
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod paste_tests {
+    #[test]
+    fn pasted_newlines_become_lf() {
+        assert_eq!(super::norm_newlines("a\r\nb\rc\nd"), "a\nb\nc\nd");
     }
 }
