@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.6.0](https://github.com/mwithington/turly/compare/v0.5.0...v0.6.0) (2026-10-28)
+
+
+### Features
+
+* :paste to import a pasted OpenAPI/Swagger spec ([f565bfb](https://github.com/mwithington/turly/commit/f565bfb4603e7a73621cfbc22b4401765b07afec))
+* :paste to import a pasted OpenAPI/Swagger spec ([92c6546](https://github.com/mwithington/turly/commit/92c65468e620e720d69d36358f886b2b5e28eb19))
+
 ## [0.5.0](https://github.com/mwithington/turly/compare/v0.4.0...v0.5.0) (2026-10-23)
 
 
