@@ -315,6 +315,8 @@ pub struct VarsEd {
     pub ed: EditorState,
     orig: String,
     armed: bool,
+    /// Pasting an import spec rather than editing variables.
+    pub paste: bool,
 }
 
 /// Clickable regions, refreshed on every draw.
@@ -985,6 +987,10 @@ impl App {
             }
             Msg::Imported(Ok(dir)) => match Workspace::open(&dir) {
                 Ok(ws) => {
+                    if self.vars.as_ref().is_some_and(|v| v.paste) {
+                        self.vars = None;
+                        self.mode = Mode::Normal;
+                    }
                     let n = ws.meta.name.clone();
                     self.set_workspace(ws);
                     self.info(format!("Imported into workspace '{n}' ({})", dir.display()));
@@ -1949,11 +1955,26 @@ impl App {
                     ed: editor(&text),
                     orig: text,
                     armed: false,
+                    paste: false,
                 });
                 self.mode = Mode::Vars;
             }
             Err(e) => self.err(e.to_string()),
         }
+    }
+
+    /// `:paste`: a blank buffer to drop a spec into, imported with Ctrl-s.
+    pub fn open_paste(&mut self) {
+        let mut ed = editor("");
+        ed.mode = EditorMode::Insert;
+        self.vars = Some(VarsEd {
+            env: String::new(),
+            ed,
+            orig: String::new(),
+            armed: false,
+            paste: true,
+        });
+        self.mode = Mode::Vars;
     }
 
     fn vars_key(&mut self, ke: KeyEvent) {
@@ -1989,6 +2010,9 @@ impl App {
 
     /// Write the `:vars` buffer to disk; `close` also leaves the popup.
     pub fn save_vars(&mut self, close: bool) {
+        if self.vars.as_ref().is_some_and(|v| v.paste) {
+            return self.import_pasted();
+        }
         let (Some(v), Some(ws)) = (&mut self.vars, &self.ws) else {
             return;
         };
@@ -2210,9 +2234,11 @@ impl App {
             Mode::Confirm => "CONFIRM",
             Mode::Help => "HELP",
             Mode::Picker => "WORKSPACES",
-            Mode::Vars => match self.vars.as_ref().map(|v| v.ed.mode) {
-                Some(EditorMode::Insert) => "VARS INSERT",
-                Some(EditorMode::Visual) => "VARS VISUAL",
+            Mode::Vars => match self.vars.as_ref().map(|v| (v.paste, v.ed.mode)) {
+                Some((true, EditorMode::Insert)) => "PASTE INSERT",
+                Some((true, _)) => "PASTE",
+                Some((_, EditorMode::Insert)) => "VARS INSERT",
+                Some((_, EditorMode::Visual)) => "VARS VISUAL",
                 _ => "VARS",
             },
             Mode::Normal => "NORMAL",

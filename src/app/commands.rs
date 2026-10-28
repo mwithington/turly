@@ -89,6 +89,11 @@ const CMDS: &[Cmd] = &[
         desc: "Create a workspace",
     },
     Cmd {
+        name: "paste",
+        args: "",
+        desc: "Paste an OpenAPI/Swagger spec (YAML or JSON) to import",
+    },
+    Cmd {
         name: "base",
         args: "[folder]",
         desc: "Set the folder that holds all your workspaces",
@@ -164,6 +169,11 @@ const CMDS: &[Cmd] = &[
         desc: "Show key bindings",
     },
 ];
+
+enum Spec {
+    Fetch(String),
+    Text(String),
+}
 
 pub struct Comp {
     pub label: String,
@@ -320,6 +330,7 @@ impl App {
             "ws" => self.cmd_ws(arg),
             "wsnew" => self.cmd_wsnew(arg),
             "base" => self.cmd_base(arg),
+            "paste" => self.open_paste(),
             "env" => {
                 if arg.is_empty() {
                     self.act(Action::NextEnv);
@@ -605,13 +616,34 @@ impl App {
         let Some(src) = it.next().map(str::to_string) else {
             return self.err("usage: import <spec path|url> [dir]");
         };
-        let dir = it.next().map(expand);
+        self.info(format!("Importing {src}..."));
+        self.start_import(Spec::Fetch(src), it.next().map(expand));
+    }
+
+    /// Import the `:paste` buffer; the popup stays open if it fails.
+    pub fn import_pasted(&mut self) {
+        let text = self
+            .vars
+            .as_ref()
+            .map(|v| text_of(&v.ed))
+            .unwrap_or_default();
+        if text.trim().is_empty() {
+            return self.err("Nothing pasted");
+        }
+        self.info("Importing pasted spec...");
+        self.start_import(Spec::Text(text), None);
+    }
+
+    fn start_import(&mut self, spec: Spec, dir: Option<PathBuf>) {
         let home = self.new_ws_home();
         let tx = self.tx.clone();
-        self.info(format!("Importing {src}..."));
         self.rt.spawn(async move {
             let r = async {
-                let imp = openapi::import(&openapi::fetch(&src).await?)?;
+                let text = match spec {
+                    Spec::Fetch(src) => openapi::fetch(&src).await?,
+                    Spec::Text(t) => t,
+                };
+                let imp = openapi::import(&text)?;
                 let dir = match dir {
                     Some(d) if d.is_absolute() => d,
                     Some(d) => std::env::current_dir()?.join(d),

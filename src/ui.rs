@@ -139,6 +139,7 @@ fn draw_splash(f: &mut Frame, app: &mut App, th: &Theme, area: Rect) {
     for l in [
         ":wsnew <path>   create a workspace",
         ":import <spec>   build one from an OpenAPI spec",
+        ":paste          paste a spec (YAML or JSON) to import",
         ":base <folder>   keep all workspaces in one folder",
         ":help           key bindings",
         ":q              quit",
@@ -1050,28 +1051,44 @@ fn draw_picker(f: &mut Frame, app: &mut App, th: &Theme, area: Rect) {
 fn draw_vars(f: &mut Frame, app: &mut App, th: &Theme, area: Rect) {
     let blink = app.cursor_on();
     let Some(v) = &mut app.vars else { return };
+    let paste = v.paste;
     let text = text_of(&v.ed);
     // Widen for the cursor row so a long value can be read in full.
     let need = text
         .lines()
         .nth(v.ed.cursor.row)
         .map_or(0, |l| l.chars().count() + 3);
-    let rect = popup_rect(area, 80.max(need as u16), area.height * 3 / 5);
+    let (w, h) = if paste {
+        (100, area.height * 4 / 5)
+    } else {
+        (80.max(need as u16), area.height * 3 / 5)
+    };
+    let rect = popup_rect(area, w, h);
     f.render_widget(Clear, rect);
     let block = Block::bordered()
         .border_style(fg(th.accent))
         .title(Span::styled(
-            format!(" Variables: {} ", v.env),
+            if paste {
+                " Paste spec ".to_string()
+            } else {
+                format!(" Variables: {} ", v.env)
+            },
             fg(th.accent).add_modifier(Modifier::BOLD),
         ))
         .title_bottom(Span::styled(
-            " key=value · secret key=value · Ctrl-s save · Esc close ",
+            if paste {
+                " paste an OpenAPI/Swagger spec (YAML or JSON) · Ctrl-s import · Esc close "
+            } else {
+                " key=value · secret key=value · Ctrl-s save · Esc close "
+            },
             fg(th.dim),
         ))
         .style(Style::default().bg(th.bg).fg(th.fg));
     let inner = block.inner(rect);
     f.render_widget(block, rect);
-    tint_vars_page(&mut v.ed, th);
+    if !paste {
+        tint_vars_page(&mut v.ed, th);
+    }
     f.render_widget(
         EditorView::new(&mut v.ed)
             .theme(editor_theme(th, blink))
@@ -1086,7 +1103,7 @@ fn draw_vars(f: &mut Frame, app: &mut App, th: &Theme, area: Rect) {
         .take(inner.height as usize)
         .enumerate()
     {
-        if oy + i == v.ed.cursor.row {
+        if paste || oy + i == v.ed.cursor.row {
             continue;
         }
         if let Some(cells) = vars_cut_cells(line, th) {
@@ -1289,6 +1306,25 @@ mod tests {
             "{s}"
         );
         assert!(!s.contains("ghost"), "missing files are skipped");
+    }
+
+    #[test]
+    fn paste_popup_opens() {
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
+        let mut app = App::new(None, Default::default(), rt.handle().clone(), tx);
+        app.run_command("paste");
+        for c in "openapi: 3.0.0".chars() {
+            app.on_key(crossterm::event::KeyEvent::new(
+                crossterm::event::KeyCode::Char(c),
+                crossterm::event::KeyModifiers::NONE,
+            ));
+        }
+        let s = render(&mut app);
+        assert!(
+            s.contains("Paste spec") && s.contains("openapi: 3.0.0"),
+            "{s}"
+        );
     }
 
     #[test]
