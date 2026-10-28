@@ -1,6 +1,6 @@
 # OpenAPI import
 
-`turly import <spec>` (or `:import`) accepts OpenAPI 3.0/3.1 and Swagger 2.0, as JSON or YAML, from a file or an `http(s)` URL. Swagger 2.0 is converted to 3.0 in memory first.
+`turly import <spec>` (or `:import`), or `:paste` to paste the spec text into a box inside Turly (Ctrl-s imports, Esc closes), accepts OpenAPI 3.0/3.1 and Swagger 2.0, as JSON or YAML, from a file or an `http(s)` URL. Swagger 2.0 is converted to 3.0 in memory first.
 
 - Tags become folders, operations become requests, in the spec's order.
 - `servers` become environments with a `base_url` variable. Path parameters become `{{vars}}` with example values.

@@ -17,6 +17,7 @@ Press `:` and type. `Tab` completes, and the list shows what each command does.
 | `:logout` | Forget cached OAuth2 tokens |
 | `:example` | Reset the body to the spec's example |
 | `:import <spec> [dir]` | Build a workspace from an OpenAPI or Swagger spec. Without `dir` it lands beside the open workspace, else in the base folder, else the current folder if it holds workspaces, else `~/.local/share/turly/workspaces` |
+| `:paste` | Open a box to paste an OpenAPI/Swagger spec (YAML or JSON) and import it with Ctrl-s (or `:w`) |
 | `:base [folder]` | Set the folder that holds all your workspaces (saved to `config.toml`; no argument shows it) |
 | `:theme [name]` | Switch theme |
 | `:help` | Key reference |
