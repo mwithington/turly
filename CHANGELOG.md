@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.6.1](https://github.com/mwithington/turly/compare/v0.6.0...v0.6.1) (2026-10-29)
+
+
+### Bug Fixes
+
+* multi-line paste landed on one line ([136c4a9](https://github.com/mwithington/turly/commit/136c4a93c0674f68c79a3ad3caaf85085905200a))
+* pasted newlines (CR) split into lines instead of one long line ([83537a1](https://github.com/mwithington/turly/commit/83537a1e0d8fbd0cbde42c2793c062434fabff95))
+
 ## [0.6.0](https://github.com/mwithington/turly/compare/v0.5.0...v0.6.0) (2026-10-28)
 
 
